@@ -4,17 +4,22 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	trans "github.com/hekmon/transmissionrpc/v2"
 )
 
 var transmissionPassword = os.Getenv("TRANSMISSIONPASSWORD")
 var transmissionUserName = os.Getenv("TRANSMISSIONUSERNAME")
 var transmissionIP = os.Getenv("TRANSMISSIONIP")
-
-// Capitalize thie and make tranmissionClient exportable?
 var transmissionClient, err = trans.New(transmissionIP, transmissionUserName, transmissionPassword, nil)
+
+var baseStyle = lipgloss.NewStyle().
+	BorderStyle(lipgloss.NormalBorder()).
+	BorderForeground(lipgloss.Color("240"))
 
 type torrentInfo trans.Torrent
 
@@ -24,21 +29,57 @@ type model struct {
 	selected    map[int]struct{} // which to-do items are selected
 	torrentName string
 	torrent     trans.Torrent
+	columns     []table.Column
+	rows        []table.Row
+	table       table.Model
 }
 
 func initialModel() model {
 	allTorrents := getAllTorrents(*transmissionClient)
+	var rows []table.Row
+
+	for _, torrent := range allTorrents {
+		rows = append(rows, buildRow(torrent))
+	}
+
+	columns := []table.Column{
+		{Title: "ID", Width: 4},
+		{Title: "Name", Width: 45},
+		{Title: "Status", Width: 23},
+		{Title: "Location", Width: 35},
+	}
+
+	table := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(30),
+	)
+	// style := table.DefaultStyles()
+	// style.Header = style.Header.
+	// 	BorderStyle(lipgloss.NormalBorder()).
+	// 	BorderForeground(lipgloss.Color("240")).
+	// 	BorderBottom(true).
+	// 	Bold(false)
+	// style.Selected = style.Selected.
+	// 	Foreground(lipgloss.Color("229")).
+	// 	Background(lipgloss.Color("57")).
+	// 	Bold(false)
+	// table.SetStyles(style)
+
 	return model{
 		torrents: allTorrents,
 		torrent:  allTorrents[0],
 		selected: make(map[int]struct{}),
+		rows:     rows,
+		columns:  columns,
+		table:    table,
 	}
 }
 
-func (m model) Init() tea.Cmd {
-	return nil
-}
+func (m model) Init() tea.Cmd { return nil }
 
+// takes a torrent and returns the torrent
 func teaTorrentInfo(torrent trans.Torrent) tea.Cmd {
 	return func() tea.Msg {
 		return torrentInfo(torrent)
@@ -54,27 +95,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Is it a key press?
 	case tea.KeyMsg:
 
-		// Cool, what was the actual key pressed?
+		// What key was pressed?
 		switch msg.String() {
 
-		// These keys should exit the program.
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
-		// The "up" and "k" keys move the cursor up
+		// Move the cursor
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
+				return m, teaTorrentInfo(m.torrents[m.cursor])
 			}
 
-		// The "down" and "j" keys move the cursor down
 		case "down", "j":
 			if m.cursor < len(m.torrents)-1 {
 				m.cursor++
+				return m, teaTorrentInfo(m.torrents[m.cursor])
 			}
 
-		// The "enter" key and the spacebar (a literal space) toggle
-		// the selected state for the item that the cursor is pointing at.
+		// Toggle 'selected' state
 		case "enter", " ":
 			_, ok := m.selected[m.cursor]
 			if ok {
@@ -86,13 +126,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Return the updated model to the Bubble Tea runtime for processing.
 	// Note that we're not returning a command.
 	return m, nil
 }
 
 func (m model) View() string {
 	s := "Transmission Torrents\n\n"
+	return baseStyle.Render(m.table.View()) + "\n"
 
 	// for i, torrent := range m.torrents {
 	for i := 0; i < 10; i++ {
@@ -144,6 +184,34 @@ func listAllTorrents(torrents []trans.Torrent) {
 		fmt.Println(torrentName)
 		fmt.Println(torrentID)
 	}
+}
+
+func buildRow(torrent trans.Torrent) table.Row {
+	torrentName := string(*torrent.Name)
+	torrentID := strconv.Itoa(int(*torrent.ID))
+	var torrentStatus string
+
+	switch *torrent.Status {
+	case 0:
+		torrentStatus = "Stopped"
+	case 1:
+		torrentStatus = "Checking Files"
+	case 2:
+		torrentStatus = "Files Checked"
+	case 3:
+		torrentStatus = "Queued for Download"
+	case 4:
+		torrentStatus = "Downloading"
+	case 5:
+		torrentStatus = "Waiting for Seeds"
+	case 6:
+		torrentStatus = "Actively Seeding"
+	case 7:
+		torrentStatus = "No Peers Found"
+	}
+
+	return table.Row{torrentID, torrentName, torrentStatus, *torrent.DownloadDir}
+
 }
 
 func main() {
