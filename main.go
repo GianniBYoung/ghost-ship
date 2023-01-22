@@ -16,12 +16,14 @@ var transmissionPassword = os.Getenv("TRANSMISSIONPASSWORD")
 var transmissionUserName = os.Getenv("TRANSMISSIONUSERNAME")
 var transmissionIP = os.Getenv("TRANSMISSIONIP")
 var transmissionClient, err = trans.New(transmissionIP, transmissionUserName, transmissionPassword, nil)
+var torrentFields = []string{"activityDate", "addedDate", "bandwidthPriority", "comment", "corruptEver", "creator", "dateCreated", "desiredAvailable", "doneDate", "downloadDir", "downloadedEver", "downloadLimit", "downloadLimited", "error", "errorString", "eta", "etaIdle", "files", "fileStats", "hashString", "haveUnchecked", "haveValid", "honorsSessionLimits", "id", "isFinished", "isPrivate", "isStalled", "leftUntilDone", "magnetLink", "manualAnnounceTime", "maxConnectedPeers", "metadataPercentComplete", "name", "peer-limit", "peers", "peersConnected", "peersFrom", "peersGettingFromUs", "peersSendingToUs", "percentDone", "pieces", "pieceCount", "pieceSize", "priorities", "queuePosition", "rateDownload", "rateUpload", "recheckProgress", "secondsDownloading", "secondsSeeding", "seedIdleLimit", "seedIdleMode", "seedRatioLimit", "seedRatioMode", "sizeWhenDone", "startDate", "status", "trackers", "trackerStats", "totalSize", "torrentFile", "uploadedEver", "uploadLimit", "uploadLimited", "uploadRatio", "wanted", "webseeds", "webseedsSendingToUs"}
 
 var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("240"))
 
 type torrentInfo trans.Torrent
+type errMsg struct{ err error }
 
 type model struct {
 	torrents    []trans.Torrent
@@ -32,6 +34,7 @@ type model struct {
 	columns     []table.Column
 	rows        []table.Row
 	table       table.Model
+	err         error
 }
 
 func initialModel() model {
@@ -77,93 +80,71 @@ func initialModel() model {
 	}
 }
 
-func (m model) Init() tea.Cmd { return nil }
+func (m model) Init() tea.Cmd  { return nil }
+func (e errMsg) Error() string { return e.err.Error() }
 
-// takes a torrent and returns the torrent
-func teaTorrentInfo(torrent trans.Torrent) tea.Cmd {
+// takes a torrentID and returns the torrent
+func getTorrentInfo(torrentID string) tea.Cmd {
 	return func() tea.Msg {
-		return torrentInfo(torrent)
+		torrentID, _ := strconv.Atoi(torrentID)
+		torrent, err := transmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(torrentID)})
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return torrentInfo(torrent[0])
 	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
+
+	case errMsg:
+		m.err = msg
+		return m, tea.Quit
+
 	case torrentInfo:
-		m.torrent = trans.Torrent(msg)
-		return m, nil
+		m.torrent = trans.Torrent(torrentInfo(msg))
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
 
 	// Is it a key press?
 	case tea.KeyMsg:
 
 		// What key was pressed?
 		switch msg.String() {
+		case "esc":
+			if m.table.Focused() {
+				m.table.Blur()
+			} else {
+				m.table.Focus()
+			}
+
+		case "enter":
+			return m, getTorrentInfo(m.table.SelectedRow()[0])
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
-		// Move the cursor
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-				return m, teaTorrentInfo(m.torrents[m.cursor])
-			}
-
-		case "down", "j":
-			if m.cursor < len(m.torrents)-1 {
-				m.cursor++
-				return m, teaTorrentInfo(m.torrents[m.cursor])
-			}
-
-		// Toggle 'selected' state
-		case "enter", " ":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = struct{}{}
-			}
-			return m, teaTorrentInfo(m.torrents[m.cursor])
 		}
 	}
 
-	// Note that we're not returning a command.
-	return m, nil
+	m.table, cmd = m.table.Update(msg)
+	return m, cmd
 }
 
 func (m model) View() string {
-	s := "Transmission Torrents\n\n"
-	return baseStyle.Render(m.table.View()) + "\n"
-
-	// for i, torrent := range m.torrents {
-	for i := 0; i < 10; i++ {
-
-		// Is the cursor pointing at this choice?
-		cursor := " " // no cursor
-		if m.cursor == i {
-			cursor = ">" // cursor!
-		}
-
-		// Is this choice selected?
-		checked := " " // not selected
-		if _, ok := m.selected[i]; ok {
-			checked = "x" // selected!
-		}
-
-		// Render the row
-		// s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, *torrent.Name)
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, *m.torrents[i].Name)
+	if m.err != nil {
+		return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
 	}
 
+	s := baseStyle.Render(m.table.View()) + "\n"
 	if *m.torrent.Name != "" {
-
-		s += fmt.Sprintf("\n\nThe currently selected torrent is %s\n", *m.torrent.Name)
-		s += fmt.Sprintf("It's ID is %v\n", *m.torrent.ID)
+		s += fmt.Sprintf("\n\nThe selected Torrent is: %s  ", *m.torrent.Name)
+	} else {
+		s += fmt.Sprintf("\n\nThe torrent is nil: %v", m)
 	}
-
-	// The footer
-	s += "\nPress q to quit.\n"
-
-	// Send the UI for rendering
 	return s
 }
 
@@ -175,15 +156,6 @@ func getAllTorrents(transmissionClient trans.Client) []trans.Torrent {
 		return torrents
 	}
 	return torrents
-}
-
-func listAllTorrents(torrents []trans.Torrent) {
-	for _, torrent := range torrents {
-		torrentName := *torrent.Name
-		torrentID := *torrent.ID
-		fmt.Println(torrentName)
-		fmt.Println(torrentID)
-	}
 }
 
 func buildRow(torrent trans.Torrent) table.Row {
@@ -228,17 +200,12 @@ func main() {
 		panic(fmt.Sprintf("Remote transmission RPC version (v%d) is incompatible with the transmission library (v%d): remote needs at least v%d",
 			serverVersion, trans.RPCVersion, serverMinimumVersion))
 	}
-	fmt.Printf("Remote transmission RPC version (v%d) is compatible with our trans library (v%d)\n", serverVersion, trans.RPCVersion)
+	// fmt.Printf("Remote transmission RPC version (v%d) is compatible with our trans library (v%d)\n", serverVersion, trans.RPCVersion)
 
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}
-
-	// torrents := getAllTorrents(*transmissionClient)
-
-	// fmt.Println(*torrents[0].Name)
-	// listAllTorrents(torrents)
 
 }
