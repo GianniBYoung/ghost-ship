@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	trans "github.com/hekmon/transmissionrpc/v2"
+)
+
+const (
+	mainView sessionState = iota
+	infoView
 )
 
 var transmissionPassword = os.Getenv("TRANSMISSIONPASSWORD")
@@ -24,11 +30,13 @@ var baseStyle = lipgloss.NewStyle().
 
 type torrentInfo trans.Torrent
 type errMsg struct{ err error }
+type sessionState uint
 
-func (m model) Init() tea.Cmd  { return nil }
-func (e errMsg) Error() string { return e.err.Error() }
+func (m mainModel) Init() tea.Cmd { return nil }
+func (e errMsg) Error() string    { return e.err.Error() }
 
-type model struct {
+type mainModel struct {
+	state       sessionState
 	torrents    []trans.Torrent
 	cursor      int              // which to-do list item our cursor is pointing at
 	selected    map[int]struct{} // which to-do items are selected
@@ -38,15 +46,32 @@ type model struct {
 	rows        []table.Row
 	table       table.Model
 	err         error
+	infoModel   infoModel
 }
 
-func initialModel() model {
+type infoModel struct {
+	Tabs       []string
+	TabContent []string
+	activeTab  int
+}
+
+// I WILL need to make a tea.cmd to update the model
+func initialModel() mainModel {
 	allTorrents := getAllTorrents(*transmissionClient)
 	var rows []table.Row
+	var info string
 
 	for _, torrent := range allTorrents {
 		rows = append(rows, buildRow(torrent))
 	}
+
+	info += "Name: " + *allTorrents[0].Name + "\n"
+	info += "Status: " + parseStatus(allTorrents[0]) + "\n"
+	info += "Size: " + string(allTorrents[0].TotalSize.GBString()) + "\n"
+	// info += *allTorrents[0] + "\n"
+	info += "Date Added: " + allTorrents[0].AddedDate.String() + "\n"
+	info += "Error: " + *allTorrents[0].ErrorString + "\n"
+	info += "ETA: " + fmt.Sprint(*allTorrents[0].Eta) + "\n"
 
 	columns := []table.Column{
 		{Title: "ID", Width: 4},
@@ -69,14 +94,27 @@ func initialModel() model {
 		Bold(false)
 	myTable.SetStyles(style)
 
-	return model{
+	return mainModel{
 		torrents: allTorrents,
 		torrent:  allTorrents[0],
 		selected: make(map[int]struct{}),
 		rows:     rows,
 		columns:  columns,
 		table:    myTable,
+		state:    mainView,
+		infoModel: infoModel{
+			Tabs:       []string{"Info", "Peers", "Files"},
+			TabContent: []string{info, "location: $home", "./nerds.txt"},
+			activeTab:  1,
+		},
 	}
+}
+
+func (m mainModel) currentFocusedModel() string {
+	if m.state == infoView {
+		return "infoView"
+	}
+	return "mainView"
 }
 
 // takes a torrentID and returns the torrent
@@ -92,8 +130,9 @@ func getTorrentInfo(torrentID string) tea.Cmd {
 	}
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 
 	case errMsg:
@@ -105,10 +144,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table, cmd = m.table.Update(msg)
 		return m, cmd
 
-	// Is it a key press?
 	case tea.KeyMsg:
 
-		// What key was pressed?
 		switch msg.String() {
 		case "esc":
 			if m.table.Focused() {
@@ -116,32 +153,79 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.table.Focus()
 			}
+		case "tab":
+			if m.state == mainView {
+				m.state = infoView
+			} else {
+				m.state = mainView
+			}
 
 		case "enter":
-			return m, getTorrentInfo(m.table.SelectedRow()[0])
+			cmd = getTorrentInfo(m.table.SelectedRow()[0])
+			cmds = append(cmds, cmd)
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
+		case "right", "l":
+			m.infoModel.activeTab = min(m.infoModel.activeTab+1, len(m.infoModel.Tabs)-1)
+			return m, nil
+		case "left", "h":
+			m.infoModel.activeTab = max(m.infoModel.activeTab-1, 0)
+			return m, nil
 		}
 	}
 
 	m.table, cmd = m.table.Update(msg)
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func renderTorrentInfo(m mainModel) string {
+	doc := strings.Builder{}
+	var renderedTabs []string
+	for i, t := range m.infoModel.Tabs {
+		var style lipgloss.Style
+		isFirst, isLast, isActive := i == 0, i == len(m.infoModel.Tabs)-1, i == m.infoModel.activeTab
+		if isActive {
+			style = activeTabStyle.Copy()
+		} else {
+			style = inactiveTabStyle.Copy()
+		}
+		border, _, _, _, _ := style.GetBorder()
+		if isFirst && isActive {
+			border.BottomLeft = "│"
+		} else if isFirst && !isActive {
+			border.BottomLeft = "├"
+		} else if isLast && isActive {
+			border.BottomRight = "│"
+		} else if isLast && !isActive {
+			border.BottomRight = "┤"
+		}
+		style = style.Border(border)
+		renderedTabs = append(renderedTabs, style.Render(t))
+	}
+
+	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
+	doc.WriteString(row)
+	doc.WriteString("\n")
+	doc.WriteString(windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(m.infoModel.TabContent[m.infoModel.activeTab]))
+	return docStyle.Render(doc.String())
+
+}
+
+func (m mainModel) View() string {
+
 	if m.err != nil {
 		return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
 	}
 
-	s := baseStyle.Render(m.table.View()) + "\n"
-	if *m.torrent.Name != "" {
-		s += fmt.Sprintf("\n\nThe selected Torrent is: %s ", *m.torrent.Name)
+	if m.state == infoView {
+
+		return renderTorrentInfo(m)
+		// s += fmt.Sprintf("\n\nThe selected Torrent is: %s ", *m.torrent.Name)
 	} else {
-		s += fmt.Sprintf("\n\nThe torrent is nil: %v", m)
+		return baseStyle.Render(m.table.View()) + "\n"
 	}
-	return s
 }
 
 func getAllTorrents(transmissionClient trans.Client) []trans.Torrent {
@@ -185,6 +269,38 @@ func buildRow(torrent trans.Torrent) table.Row {
 	return table.Row{torrentID, string(*torrent.Name), torrentStatus, torrentSize, *torrent.DownloadDir}
 
 }
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
+	border := lipgloss.RoundedBorder()
+	border.BottomLeft = left
+	border.Bottom = middle
+	border.BottomRight = right
+	return border
+}
+
+var (
+	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
+	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
+	docStyle          = lipgloss.NewStyle().Padding(1, 2, 1, 2)
+	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
+	activeTabStyle    = inactiveTabStyle.Copy().Border(activeTabBorder, true)
+	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+)
 
 func main() {
 	if err != nil {
