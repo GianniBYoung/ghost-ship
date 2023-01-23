@@ -25,6 +25,9 @@ var baseStyle = lipgloss.NewStyle().
 type torrentInfo trans.Torrent
 type errMsg struct{ err error }
 
+func (m model) Init() tea.Cmd  { return nil }
+func (e errMsg) Error() string { return e.err.Error() }
+
 type model struct {
 	torrents    []trans.Torrent
 	cursor      int              // which to-do list item our cursor is pointing at
@@ -48,27 +51,23 @@ func initialModel() model {
 	columns := []table.Column{
 		{Title: "ID", Width: 4},
 		{Title: "Name", Width: 45},
-		{Title: "Status", Width: 23},
+		{Title: "Status", Width: 20},
+		{Title: "Size", Width: 8},
 		{Title: "Location", Width: 35},
 	}
 
-	table := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(30),
-	)
-	// style := table.DefaultStyles()
-	// style.Header = style.Header.
-	// 	BorderStyle(lipgloss.NormalBorder()).
-	// 	BorderForeground(lipgloss.Color("240")).
-	// 	BorderBottom(true).
-	// 	Bold(false)
-	// style.Selected = style.Selected.
-	// 	Foreground(lipgloss.Color("229")).
-	// 	Background(lipgloss.Color("57")).
-	// 	Bold(false)
-	// table.SetStyles(style)
+	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(60))
+	style := table.DefaultStyles()
+	style.Header = style.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(false)
+	style.Selected = style.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	myTable.SetStyles(style)
 
 	return model{
 		torrents: allTorrents,
@@ -76,12 +75,9 @@ func initialModel() model {
 		selected: make(map[int]struct{}),
 		rows:     rows,
 		columns:  columns,
-		table:    table,
+		table:    myTable,
 	}
 }
-
-func (m model) Init() tea.Cmd  { return nil }
-func (e errMsg) Error() string { return e.err.Error() }
 
 // takes a torrentID and returns the torrent
 func getTorrentInfo(torrentID string) tea.Cmd {
@@ -141,7 +137,7 @@ func (m model) View() string {
 
 	s := baseStyle.Render(m.table.View()) + "\n"
 	if *m.torrent.Name != "" {
-		s += fmt.Sprintf("\n\nThe selected Torrent is: %s  ", *m.torrent.Name)
+		s += fmt.Sprintf("\n\nThe selected Torrent is: %s ", *m.torrent.Name)
 	} else {
 		s += fmt.Sprintf("\n\nThe torrent is nil: %v", m)
 	}
@@ -158,31 +154,35 @@ func getAllTorrents(transmissionClient trans.Client) []trans.Torrent {
 	return torrents
 }
 
-func buildRow(torrent trans.Torrent) table.Row {
-	torrentName := string(*torrent.Name)
-	torrentID := strconv.Itoa(int(*torrent.ID))
-	var torrentStatus string
-
+func parseStatus(torrent trans.Torrent) string {
 	switch *torrent.Status {
 	case 0:
-		torrentStatus = "Stopped"
+		return "Stopped"
 	case 1:
-		torrentStatus = "Checking Files"
+		return "Checking Files"
 	case 2:
-		torrentStatus = "Files Checked"
+		return "Files Checked"
 	case 3:
-		torrentStatus = "Queued for Download"
+		return "Queued for Download"
 	case 4:
-		torrentStatus = "Downloading"
+		return "Downloading"
 	case 5:
-		torrentStatus = "Waiting for Seeds"
+		return "Waiting for Seeds"
 	case 6:
-		torrentStatus = "Actively Seeding"
+		return "Seeding"
 	case 7:
-		torrentStatus = "No Peers Found"
+		return "No Peers Found"
 	}
+	return "Status unknown???"
 
-	return table.Row{torrentID, torrentName, torrentStatus, *torrent.DownloadDir}
+}
+
+func buildRow(torrent trans.Torrent) table.Row {
+	torrentID := strconv.Itoa(int(*torrent.ID))
+	torrentStatus := parseStatus(torrent)
+	// torrentSize := *torrent.TotalSize
+	torrentSize := string(torrent.TotalSize.GBString())
+	return table.Row{torrentID, string(*torrent.Name), torrentStatus, torrentSize, *torrent.DownloadDir}
 
 }
 
@@ -200,7 +200,6 @@ func main() {
 		panic(fmt.Sprintf("Remote transmission RPC version (v%d) is incompatible with the transmission library (v%d): remote needs at least v%d",
 			serverVersion, trans.RPCVersion, serverMinimumVersion))
 	}
-	// fmt.Printf("Remote transmission RPC version (v%d) is compatible with our trans library (v%d)\n", serverVersion, trans.RPCVersion)
 
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {

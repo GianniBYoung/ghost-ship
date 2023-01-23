@@ -11,3 +11,4 @@ This is currently a work in progress and a learning experience -- expect many it
 5. Progress bars
 6. Dynamic updates
 7. Bulk actions - remove, move, reannounce
+8. update keymaps: https://github.com/charmbracelet/bubbles/blob/v0.15.0/table/table.go#L51
