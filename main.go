@@ -213,11 +213,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.infoModel.activeTab = min(m.infoModel.activeTab+1, len(m.infoModel.Tabs)-1)
 			}
 		case "left", "h":
-			if m.state == infoView {
-				m.state = mainView
-			} else {
-				m.infoModel.activeTab = max(m.infoModel.activeTab-1, 0)
-			}
+			m.infoModel.activeTab = max(m.infoModel.activeTab-1, 0)
 		}
 	}
 
