@@ -29,6 +29,7 @@ var baseStyle = lipgloss.NewStyle().
 	BorderForeground(lipgloss.Color("240"))
 
 type torrentInfo trans.Torrent
+type torrentInfoTab infoModel
 type errMsg struct{ err error }
 type sessionState uint
 
@@ -55,6 +56,26 @@ type infoModel struct {
 	activeTab  int
 }
 
+func updateTorrentInfoTabs(torrent trans.Torrent) (info, peers, files string) {
+
+	info += "Name: " + *torrent.Name + "\n"
+	info += "Status: " + parseStatus(torrent) + "\n"
+	info += "Size: " + string(torrent.TotalSize.GBString()) + "\n"
+	// info += *allTorrents[0] + "\n"
+	info += "Date Added: " + torrent.AddedDate.String() + "\n"
+	info += "Error: " + *torrent.ErrorString + "\n"
+	info += "ETA: " + fmt.Sprint(*torrent.Eta) + "\n"
+
+	peers += "Placeholder"
+	// p := *torrent.Peers[0]
+	// peers += "Peer Address: " + p.Address + "\n"
+	// peers += "Download Speed: " + p.ConvertDownloadSpeed().ByteString() + "\n"
+
+	files += "Placeholder"
+	// files += "Files?" + *torrent.Pieces + "\n"
+	return info, peers, files
+}
+
 // I WILL need to make a tea.cmd to update the model
 func initialModel() mainModel {
 	allTorrents := getAllTorrents(*transmissionClient)
@@ -65,13 +86,7 @@ func initialModel() mainModel {
 		rows = append(rows, buildRow(torrent))
 	}
 
-	info += "Name: " + *allTorrents[0].Name + "\n"
-	info += "Status: " + parseStatus(allTorrents[0]) + "\n"
-	info += "Size: " + string(allTorrents[0].TotalSize.GBString()) + "\n"
-	// info += *allTorrents[0] + "\n"
-	info += "Date Added: " + allTorrents[0].AddedDate.String() + "\n"
-	info += "Error: " + *allTorrents[0].ErrorString + "\n"
-	info += "ETA: " + fmt.Sprint(*allTorrents[0].Eta) + "\n"
+	info, peers, files := updateTorrentInfoTabs(allTorrents[0])
 
 	columns := []table.Column{
 		{Title: "ID", Width: 4},
@@ -104,8 +119,8 @@ func initialModel() mainModel {
 		state:    mainView,
 		infoModel: infoModel{
 			Tabs:       []string{"Info", "Peers", "Files"},
-			TabContent: []string{info, "location: $home", "./nerds.txt"},
-			activeTab:  1,
+			TabContent: []string{info, peers, files},
+			activeTab:  0,
 		},
 	}
 }
@@ -130,6 +145,24 @@ func getTorrentInfo(torrentID string) tea.Cmd {
 	}
 }
 
+//create struct builder for this
+func updateTabs(torrent trans.Torrent) tea.Cmd {
+	return func() tea.Msg {
+
+		info, peers, files := updateTorrentInfoTabs(torrent)
+		infoModel := infoModel{
+			Tabs:       []string{"Info", "Peers", "Files"},
+			TabContent: []string{info, peers, files},
+			activeTab:  0,
+		}
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return torrentInfoTab(infoModel)
+	}
+}
+
 func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -142,7 +175,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case torrentInfo:
 		m.torrent = trans.Torrent(torrentInfo(msg))
 		m.table, cmd = m.table.Update(msg)
-		return m, cmd
+		cmds = append(cmds, cmd)
+
+	case torrentInfoTab:
+		m.infoModel = infoModel(msg)
 
 	case tea.KeyMsg:
 
@@ -153,9 +189,12 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.table.Focus()
 			}
+
 		case "tab":
 			if m.state == mainView {
 				m.state = infoView
+				cmd = updateTabs(m.torrent)
+				cmds = append(cmds, cmd)
 			} else {
 				m.state = mainView
 			}
@@ -168,11 +207,17 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "right", "l":
-			m.infoModel.activeTab = min(m.infoModel.activeTab+1, len(m.infoModel.Tabs)-1)
-			return m, nil
+			if m.state == mainView {
+				m.state = infoView
+			} else {
+				m.infoModel.activeTab = min(m.infoModel.activeTab+1, len(m.infoModel.Tabs)-1)
+			}
 		case "left", "h":
-			m.infoModel.activeTab = max(m.infoModel.activeTab-1, 0)
-			return m, nil
+			if m.state == infoView {
+				m.state = mainView
+			} else {
+				m.infoModel.activeTab = max(m.infoModel.activeTab-1, 0)
+			}
 		}
 	}
 
