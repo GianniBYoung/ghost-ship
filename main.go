@@ -80,13 +80,10 @@ func updateTorrentInfoTabs(torrent trans.Torrent) (info, peers, files string) {
 func initialModel() mainModel {
 	allTorrents := getAllTorrents(*transmissionClient)
 	var rows []table.Row
-	var info string
 
 	for _, torrent := range allTorrents {
 		rows = append(rows, buildRow(torrent))
 	}
-
-	info, peers, files := updateTorrentInfoTabs(allTorrents[0])
 
 	columns := []table.Column{
 		{Title: "ID", Width: 4},
@@ -110,18 +107,14 @@ func initialModel() mainModel {
 	myTable.SetStyles(style)
 
 	return mainModel{
-		torrents: allTorrents,
-		torrent:  allTorrents[0],
-		selected: make(map[int]struct{}),
-		rows:     rows,
-		columns:  columns,
-		table:    myTable,
-		state:    mainView,
-		infoModel: infoModel{
-			Tabs:       []string{"Info", "Peers", "Files"},
-			TabContent: []string{info, peers, files},
-			activeTab:  0,
-		},
+		torrents:  allTorrents,
+		torrent:   allTorrents[0],
+		selected:  make(map[int]struct{}),
+		rows:      rows,
+		columns:   columns,
+		table:     myTable,
+		state:     mainView,
+		infoModel: createInfoModel(allTorrents[0]),
 	}
 }
 
@@ -145,21 +138,21 @@ func getTorrentInfo(torrentID string) tea.Cmd {
 	}
 }
 
+func createInfoModel(torrent trans.Torrent) infoModel {
+	info, peers, files := updateTorrentInfoTabs(torrent)
+	infoModel := infoModel{
+		Tabs:       []string{"Info", "Peers", "Files"},
+		TabContent: []string{info, peers, files},
+		activeTab:  0,
+	}
+	return infoModel
+}
+
 // create struct builder for this
 func updateTabs(torrent trans.Torrent) tea.Cmd {
 	return func() tea.Msg {
+		return torrentInfoTab(createInfoModel(torrent))
 
-		info, peers, files := updateTorrentInfoTabs(torrent)
-		infoModel := infoModel{
-			Tabs:       []string{"Info", "Peers", "Files"},
-			TabContent: []string{info, peers, files},
-			activeTab:  0,
-		}
-		if err != nil {
-			return errMsg{err}
-		}
-
-		return torrentInfoTab(infoModel)
 	}
 }
 
