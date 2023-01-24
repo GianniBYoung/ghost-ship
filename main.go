@@ -145,7 +145,7 @@ func getTorrentInfo(torrentID string) tea.Cmd {
 	}
 }
 
-//create struct builder for this
+// create struct builder for this
 func updateTabs(torrent trans.Torrent) tea.Cmd {
 	return func() tea.Msg {
 
@@ -343,10 +343,18 @@ var (
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
 
-func main() {
+func setupCheck() {
+
 	if err != nil {
 		fmt.Println("Unable to create transmission client.")
 		panic(err)
+	}
+
+	if transmissionPassword == "" || transmissionIP == "" || transmissionUserName == "" {
+		panic(`Credentials error. Are the environmental variables set?
+'TRANSMISSIONPASSWORD',
+'TRANSMISSIONUSERNAME',
+'TRANSMISSIONIP'`)
 	}
 
 	ok, serverVersion, serverMinimumVersion, err := transmissionClient.RPCVersion(context.TODO())
@@ -358,10 +366,14 @@ func main() {
 			serverVersion, trans.RPCVersion, serverMinimumVersion))
 	}
 
+}
+
+func main() {
+	setupCheck()
+
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}
-
 }
