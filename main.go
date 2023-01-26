@@ -28,7 +28,6 @@ var torrentFields = []string{"activityDate", "addedDate", "bandwidthPriority", "
 var baseStyle = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
 
 type torrentInfo trans.Torrent
-type torrentInfoTab InfoModel
 type errMsg struct{ err error }
 type status int
 
@@ -62,21 +61,6 @@ type InfoModel struct {
 	focused    status
 }
 
-func NewInfoModel(focused status) *InfoModel {
-	infoModel := &InfoModel{focused: focused}
-	infoModel.Tabs = []string{"Info", "Peers", "Files"}
-	infoModel.TabContent = []string{"Selected Torrent Info Will Appear Here.", "Peer Information:", "File Information"}
-	infoModel.activeTab = 0
-	return infoModel
-}
-
-func (i *InfoModel) createInfoModel(torrent trans.Torrent) {
-	info, peers, files := updateTorrentInfoTabs(torrent)
-	i.Tabs = []string{"Info", "Peers", "Files"}
-	i.TabContent = []string{info, peers, files}
-	i.activeTab = 0
-}
-
 func (m *Model) Next() {
 	if m.state == model {
 		m.state = infoView
@@ -90,6 +74,14 @@ func (m *Model) Prev() {
 	} else {
 		m.state--
 	}
+}
+
+func NewInfoModel(focused status) *InfoModel {
+	infoModel := &InfoModel{focused: focused}
+	infoModel.Tabs = []string{"Info", "Peers", "Files"}
+	infoModel.TabContent = []string{"Selected Torrent Info Will Appear Here.", "Peer Information:", "File Information"}
+	infoModel.activeTab = 0
+	return infoModel
 }
 
 func (m *torrentTable) initTable(height int) {
@@ -127,26 +119,6 @@ func (m *torrentTable) initTable(height int) {
 	m.torrents = allTorrents
 	m.table = myTable
 
-}
-
-func updateTorrentInfoTabs(torrent trans.Torrent) (info, peers, files string) {
-
-	info += "Name: " + *torrent.Name + "\n"
-	info += "Status: " + parseStatus(torrent) + "\n"
-	info += "Size: " + string(torrent.TotalSize.GBString()) + "\n"
-	// info += *allTorrents[0] + "\n"
-	info += "Date Added: " + torrent.AddedDate.String() + "\n"
-	info += "Error: " + *torrent.ErrorString + "\n"
-	info += "ETA: " + fmt.Sprint(*torrent.Eta) + "\n"
-
-	peers += "Placeholder"
-	// p := *torrent.Peers[0]
-	// peers += "Peer Address: " + p.Address + "\n"
-	// peers += "Download Speed: " + p.ConvertDownloadSpeed().ByteString() + "\n"
-
-	files += "Placeholder"
-	// files += "Files?" + *torrent.Pieces + "\n"
-	return info, peers, files
 }
 
 // takes a torrentID and returns the torrent
@@ -197,6 +169,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left", "h":
 			m.Prev()
 
+		case "n":
+			models[model] = m
+			//error in createInfo causing null pointer
+			models[infoView] = createInfoModel(m.torrentTable.torrent)
+			return models[infoView].Update(m.torrentTable.torrent)
+
+			//still null pointer
+			// with this commented out// return models[infoView].Update(m.torrentTable.torrent)
+			// return m, nil
+
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
@@ -204,6 +186,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
 	return m, cmd
+}
+
+func (m Model) View() string {
+
+	if m.err != nil {
+		return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
+	}
+
+	return baseStyle.Render(m.torrentTable.table.View()) + "\n"
 }
 
 func renderTorrentInfo(m InfoModel) string {
@@ -238,16 +229,6 @@ func renderTorrentInfo(m InfoModel) string {
 	return docStyle.Render(doc.String())
 
 }
-
-func (m Model) View() string {
-
-	if m.err != nil {
-		return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
-	}
-
-	return baseStyle.Render(m.torrentTable.table.View()) + "\n"
-}
-
 func getAllTorrents(transmissionClient trans.Client) []trans.Torrent {
 	torrents, err := transmissionClient.TorrentGetAll(context.TODO())
 	if err != nil {
@@ -345,16 +326,36 @@ func setupCheck() {
 
 }
 
+func createInfoModel(torrent trans.Torrent) (infoModel InfoModel) {
+	infoModel.Tabs = []string{"Info", "Peers", "Files"}
+	infoModel.activeTab = 0
+	//0 - Info
+	//1 - peers
+	//2 - files
+	var info string
+	info += "Name: " + *torrent.Name + "\n"
+	info += "Status: " + parseStatus(torrent) + "\n"
+	info += "Size: " + string(torrent.TotalSize.GBString()) + "\n"
+	info += "Date Added: " + torrent.AddedDate.String() + "\n"
+	info += "Error: " + *torrent.ErrorString + "\n"
+	info += "ETA: " + fmt.Sprint(*torrent.Eta) + "\n"
+
+	peers := "Placeholder"
+	// p := *torrent.Peers[0]
+	// peers += "Peer Address: " + p.Address + "\n"
+	// peers += "Download Speed: " + p.ConvertDownloadSpeed().ByteString() + "\n"
+	files := "Placeholder"
+	// files += "Files?" + *torrent.Pieces + "\n"
+	infoModel.TabContent = []string{info, files, peers}
+	return infoModel
+}
+
 func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	// case tea.WindowSizeMsg:
-	// 	// init tabs here
-	// 	if !m.loaded {
-	// 		m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
-	// 		return m, cmd
-	// 	}
+	case torrentInfo:
+		createInfoModel(trans.Torrent(msg))
 
 	case tea.KeyMsg:
 		switch msg.String() {
