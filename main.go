@@ -163,21 +163,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = getTorrentInfo(m.torrentTable.table.SelectedRow()[0])
 			return m, cmd
 
-		case "right", "l":
-			m.Next()
+		// case "right", "l":
+		// 	m.Next()
 
 		case "left", "h":
 			m.Prev()
 
-		case "n":
+		case "l":
 			models[model] = m
-			//error in createInfo causing null pointer
 			models[infoView] = createInfoModel(m.torrentTable.torrent)
-			return models[infoView].Update(m.torrentTable.torrent)
-
-			//still null pointer
-			// with this commented out// return models[infoView].Update(m.torrentTable.torrent)
-			// return m, nil
+			// cmd = getTorrentInfo(m.torrentTable.table.SelectedRow()[0])
+			// return models[infoView].Update(cmd)
+			return models[infoView].Update(nil)
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
