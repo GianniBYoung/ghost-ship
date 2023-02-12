@@ -14,27 +14,23 @@ import (
 )
 
 const (
-	model status = iota
+	model Status = iota
 	infoView
 )
 
 var models []tea.Model
-var transmissionPassword = os.Getenv("TRANSMISSIONPASSWORD")
-var transmissionUserName = os.Getenv("TRANSMISSIONUSERNAME")
-var transmissionIP = os.Getenv("TRANSMISSIONIP")
-var transmissionClient, err = trans.New(transmissionIP, transmissionUserName, transmissionPassword, nil)
 var torrentFields = []string{"activityDate", "addedDate", "bandwidthPriority", "comment", "corruptEver", "creator", "dateCreated", "desiredAvailable", "doneDate", "downloadDir", "downloadedEver", "downloadLimit", "downloadLimited", "error", "errorString", "eta", "etaIdle", "files", "fileStats", "hashString", "haveUnchecked", "haveValid", "honorsSessionLimits", "id", "isFinished", "isPrivate", "isStalled", "leftUntilDone", "magnetLink", "manualAnnounceTime", "maxConnectedPeers", "metadataPercentComplete", "name", "peer-limit", "peers", "peersConnected", "peersFrom", "peersGettingFromUs", "peersSendingToUs", "percentDone", "pieces", "pieceCount", "pieceSize", "priorities", "queuePosition", "rateDownload", "rateUpload", "recheckProgress", "secondsDownloading", "secondsSeeding", "seedIdleLimit", "seedIdleMode", "seedRatioLimit", "seedRatioMode", "sizeWhenDone", "startDate", "status", "trackers", "trackerStats", "totalSize", "torrentFile", "uploadedEver", "uploadLimit", "uploadLimited", "uploadRatio", "wanted", "webseeds", "webseedsSendingToUs"}
 
 var baseStyle = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
 
-type torrentInfo trans.Torrent
-type errMsg struct{ err error }
-type status int
+type TorrentInfo trans.Torrent
+type ErrMsg struct{ err error }
+type Status int
 
 func NewModel() *Model            { return &Model{} }
 func (m Model) Init() tea.Cmd     { return nil }
 func (m InfoModel) Init() tea.Cmd { return nil }
-func (e errMsg) Error() string    { return e.err.Error() }
+func (e ErrMsg) Error() string    { return e.err.Error() }
 
 type torrentTable struct {
 	columns  []table.Column
@@ -48,7 +44,7 @@ type torrentTable struct {
 
 type Model struct {
 	torrentTable torrentTable
-	state        status
+	state        Status
 	err          error
 	infoModel    InfoModel
 	loaded       bool
@@ -58,7 +54,7 @@ type InfoModel struct {
 	Tabs       []string
 	TabContent []string
 	activeTab  int
-	focused    status
+	focused    Status
 }
 
 func (m *Model) Next() {
@@ -76,7 +72,7 @@ func (m *Model) Prev() {
 	}
 }
 
-func NewInfoModel(focused status) *InfoModel {
+func NewInfoModel(focused Status) *InfoModel {
 	infoModel := &InfoModel{focused: focused}
 	infoModel.Tabs = []string{"Info", "Peers", "Files"}
 	infoModel.TabContent = []string{"Selected Torrent Info Will Appear Here.", "Peer Information:", "File Information"}
@@ -85,7 +81,7 @@ func NewInfoModel(focused status) *InfoModel {
 }
 
 func (m *torrentTable) initTable(height int) {
-	allTorrents := getAllTorrents(*transmissionClient)
+	allTorrents := getAllTorrents(*TransmissionClient)
 	var rows []table.Row
 
 	for _, torrent := range allTorrents {
@@ -125,11 +121,11 @@ func (m *torrentTable) initTable(height int) {
 func getTorrentInfo(torrentID string) tea.Cmd {
 	return func() tea.Msg {
 		torrentID, _ := strconv.Atoi(torrentID)
-		torrent, err := transmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(torrentID)})
+		torrent, err := TransmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(torrentID)})
 		if err != nil {
-			return errMsg{err}
+			return ErrMsg{err}
 		}
-		return torrentInfo(torrent[0])
+		return TorrentInfo(torrent[0])
 	}
 }
 
@@ -146,12 +142,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-	case errMsg:
+	case ErrMsg:
 		m.err = msg
 		return m, tea.Quit
 
-	case torrentInfo:
-		m.torrentTable.torrent = trans.Torrent(torrentInfo(msg))
+	case TorrentInfo:
+		m.torrentTable.torrent = trans.Torrent(TorrentInfo(msg))
 		m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
 		return m, cmd
 
@@ -298,31 +294,6 @@ var (
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
 
-func setupCheck() {
-
-	if err != nil {
-		fmt.Println("Unable to create transmission client.")
-		panic(err)
-	}
-
-	if transmissionPassword == "" || transmissionIP == "" || transmissionUserName == "" {
-		panic(`Credentials error. Are the environmental variables set?
-'TRANSMISSIONPASSWORD',
-'TRANSMISSIONUSERNAME',
-'TRANSMISSIONIP'`)
-	}
-
-	ok, serverVersion, serverMinimumVersion, err := transmissionClient.RPCVersion(context.TODO())
-	if err != nil {
-		panic(err)
-	}
-	if !ok {
-		panic(fmt.Sprintf("Remote transmission RPC version (v%d) is incompatible with the transmission library (v%d): remote needs at least v%d",
-			serverVersion, trans.RPCVersion, serverMinimumVersion))
-	}
-
-}
-
 func createInfoModel(torrent trans.Torrent) (infoModel InfoModel) {
 	infoModel.Tabs = []string{"Info", "Peers", "Files"}
 	infoModel.activeTab = 0
@@ -351,7 +322,7 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case torrentInfo:
+	case TorrentInfo:
 		createInfoModel(trans.Torrent(msg))
 
 	case tea.KeyMsg:
@@ -375,7 +346,7 @@ func (m InfoModel) View() string {
 }
 
 func main() {
-	setupCheck()
+	transmissionClientInit()
 	models = []tea.Model{NewModel(), NewInfoModel(infoView)}
 
 	m := models[model]
