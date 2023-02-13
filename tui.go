@@ -129,9 +129,13 @@ func (m *TorrentTable) initTable(height int) {
 }
 
 // takes a torrentID and returns the torrent
-func getTorrentInfo(m Model) tea.Cmd {
+func getTorrentInfo(m Model, offset int) tea.Cmd {
 	return func() tea.Msg {
 		torrentID, _ := strconv.Atoi(m.torrentTable.table.SelectedRow()[0])
+		max := len(m.torrentTable.table.Rows())
+		if torrentID+offset > 0 && torrentID+offset < max {
+			torrentID += offset
+		}
 		torrent, err := TransmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(torrentID)})
 		if err != nil {
 			return errMsg{err}
@@ -140,14 +144,9 @@ func getTorrentInfo(m Model) tea.Cmd {
 	}
 }
 
-// func (m Model) SelectedTorrent() trans.Torrent {
-
-// 	getTorrentInfo()
-// 	return m.rows[m.cursor]
-// }
-
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -156,7 +155,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.torrentTable.height = msg.Height - 25
 			m.torrentTable.initTable(m.torrentTable.height)
 			m.loaded = true
-			m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
 			return m, cmd
 		}
 
@@ -166,19 +164,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case torrentInfo:
 		m.torrentTable.torrent = trans.Torrent(torrentInfo(msg))
-		m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
-		return m, cmd
+		// return m, cmd
 
 	case tea.KeyMsg:
 
 		switch msg.String() {
 
 		case "enter":
-			cmd = getTorrentInfo(m)
+			cmd = getTorrentInfo(m, 0)
+			cmds = append(cmds, cmd)
 			return m, cmd
 
-		// case "right", "l":
-		// 	m.Next()
+			// Consider looking into binds: when you jump it won't update to the current torrent
+		case "j":
+			cmd = getTorrentInfo(m, 1)
+			cmds = append(cmds, cmd)
+
+		case "k":
+			cmd = getTorrentInfo(m, -1)
+			cmds = append(cmds, cmd)
 
 		case "left", "h":
 			m.Prev()
@@ -201,7 +205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
@@ -217,7 +221,7 @@ func (m Model) View() string {
 		torrentName = *m.torrentTable.torrent.Name
 		tSplit = m.torrentTable.table.SelectedRow()[0]
 	}
-	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName + "\nRow: " + tSplit
+	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName + "\nID: " + tSplit
 }
 
 func renderTorrentInfo(m InfoModel) string {
