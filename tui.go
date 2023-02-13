@@ -62,6 +62,7 @@ func (m *Model) Next() {
 		m.state++
 	}
 }
+
 func (m *Model) Prev() {
 	if m.state == InfoView {
 		m.state = MainModel
@@ -166,7 +167,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case torrentInfo:
 		m.torrentTable.torrent = trans.Torrent(torrentInfo(msg))
-		// return m, cmd
 
 	case tea.KeyMsg:
 
@@ -192,7 +192,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "m":
 			TransmissionClient.TorrentSetLocation(context.TODO(), *m.torrentTable.torrent.ID, "/media/unit/ghost-ship-testing", true)
 			m.torrentTable.updateTable()
-			// m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
 
 		case "l":
 			Models[MainModel] = m
@@ -294,7 +293,6 @@ func buildRow(torrent trans.Torrent) table.Row {
 	// torrentSize := *torrent.TotalSize
 	torrentSize := string(torrent.TotalSize.GBString())
 	return table.Row{torrentID, string(*torrent.Name), torrentStatus, torrentSize, *torrent.DownloadDir}
-
 }
 
 func max(a, b int) int {
@@ -322,11 +320,12 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 var (
 	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
 	activeTabBorder   = tabBorderWithBottom("┘", "─", "└")
-	docStyle          = lipgloss.NewStyle().Padding(1, 2, 1, 2)
-	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
-	activeTabStyle    = inactiveTabStyle.Copy().Border(activeTabBorder, true)
-	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+	// figure out how to manage height and scroll
+	docStyle         = lipgloss.NewStyle().Padding(1, 2, 1, 2).MaxWidth(200).MaxHeight(50)
+	highlightColor   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	inactiveTabStyle = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
+	activeTabStyle   = inactiveTabStyle.Copy().Border(activeTabBorder, true)
+	windowStyle      = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
 
 func createInfoModel(torrent trans.Torrent) (infoModel InfoModel) {
