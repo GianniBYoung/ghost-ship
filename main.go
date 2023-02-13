@@ -11,7 +11,7 @@ func main() {
 	transmissionClientInit()
 	Models = []tea.Model{NewModel(), NewInfoModel(InfoView)}
 
-	m := Models[Mainmodel]
+	m := Models[MainModel]
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {

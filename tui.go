@@ -22,7 +22,7 @@ var torrentFields = []string{"activityDate", "addedDate", "bandwidthPriority", "
 var baseStyle = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
 
 const (
-	Mainmodel status = iota
+	MainModel status = iota
 	InfoView
 )
 
@@ -54,7 +54,7 @@ type InfoModel struct {
 }
 
 func (m *Model) Next() {
-	if m.state == Mainmodel {
+	if m.state == MainModel {
 		m.state = InfoView
 	} else {
 		m.state++
@@ -62,7 +62,7 @@ func (m *Model) Next() {
 }
 func (m *Model) Prev() {
 	if m.state == InfoView {
-		m.state = Mainmodel
+		m.state = MainModel
 	} else {
 		m.state--
 	}
@@ -193,10 +193,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// m.torrentTable.table, cmd = m.torrentTable.table.Update(msg)
 
 		case "l":
-			Models[Mainmodel] = m
+			Models[MainModel] = m
 			Models[InfoView] = createInfoModel(m.torrentTable.torrent)
-			// cmd = getTorrentInfo(m.torrentTable.table.SelectedRow()[0])
-			// return models[infoView].Update(cmd)
 			return Models[InfoView].Update(nil)
 
 		case "ctrl+c", "q":
@@ -369,7 +367,11 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
+
+		case "tab":
+			return Models[MainModel].Update(nil)
 		}
+
 	}
 
 	return m, cmd
