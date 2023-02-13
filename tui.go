@@ -32,7 +32,6 @@ func (m InfoModel) Init() tea.Cmd { return nil }
 func (e errMsg) Error() string    { return e.err.Error() }
 
 type TorrentTable struct {
-	cursor   int              // which to-do list item our cursor is pointing at
 	selected map[int]struct{} // which to-do items are selected
 	table    table.Model
 	torrent  trans.Torrent
@@ -130,9 +129,9 @@ func (m *TorrentTable) initTable(height int) {
 }
 
 // takes a torrentID and returns the torrent
-func getTorrentInfo(torrentID string) tea.Cmd {
+func getTorrentInfo(m Model) tea.Cmd {
 	return func() tea.Msg {
-		torrentID, _ := strconv.Atoi(torrentID)
+		torrentID, _ := strconv.Atoi(m.torrentTable.table.SelectedRow()[0])
 		torrent, err := TransmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(torrentID)})
 		if err != nil {
 			return errMsg{err}
@@ -140,6 +139,12 @@ func getTorrentInfo(torrentID string) tea.Cmd {
 		return torrentInfo(torrent[0])
 	}
 }
+
+// func (m Model) SelectedTorrent() trans.Torrent {
+
+// 	getTorrentInfo()
+// 	return m.rows[m.cursor]
+// }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -169,7 +174,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 
 		case "enter":
-			cmd = getTorrentInfo(m.torrentTable.table.SelectedRow()[0])
+			cmd = getTorrentInfo(m)
 			return m, cmd
 
 		// case "right", "l":
@@ -205,12 +210,14 @@ func (m Model) View() string {
 		return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
 	}
 
-	cursor := strconv.Itoa(int(m.torrentTable.cursor))
+	cursor := strconv.Itoa(int(m.torrentTable.table.Cursor()))
 	torrentName := "N/A"
+	var tSplit string
 	if m.loaded {
 		torrentName = *m.torrentTable.torrent.Name
+		tSplit = m.torrentTable.table.SelectedRow()[0]
 	}
-	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName
+	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName + "\nRow: " + tSplit
 }
 
 func renderTorrentInfo(m InfoModel) string {
