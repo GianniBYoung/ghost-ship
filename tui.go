@@ -51,6 +51,8 @@ type InfoModel struct {
 	TabContent []string
 	activeTab  int
 	focused    status
+	height     int
+	width      int
 }
 
 func (m *Model) Next() {
@@ -250,7 +252,8 @@ func renderTorrentInfo(m InfoModel) string {
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	doc.WriteString(row)
 	doc.WriteString("\n")
-	doc.WriteString(windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(m.TabContent[m.activeTab]))
+	content := lipgloss.JoinHorizontal(lipgloss.Top, windowStyle.Render(m.TabContent[m.activeTab]))
+	doc.WriteString(content)
 	return docStyle.Render(doc.String())
 
 }
@@ -318,35 +321,40 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 
 var (
 	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
+	activeTabBorder   = tabBorderWithBottom("┘", "─", "└")
 	docStyle          = lipgloss.NewStyle().Padding(1, 2, 1, 2)
 	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
 	activeTabStyle    = inactiveTabStyle.Copy().Border(activeTabBorder, true)
-	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
 
 func createInfoModel(torrent trans.Torrent) (infoModel InfoModel) {
 	infoModel.Tabs = []string{"Info", "Peers", "Files"}
 	infoModel.activeTab = 0
-	//0 - Info
-	//1 - peers
-	//2 - files
-	var info string
-	info += "Name: " + *torrent.Name + "\n"
-	info += "Status: " + parseStatus(torrent) + "\n"
-	info += "Size: " + string(torrent.TotalSize.GBString()) + "\n"
-	info += "Date Added: " + torrent.AddedDate.String() + "\n"
-	info += "Error: " + *torrent.ErrorString + "\n"
-	info += "ETA: " + fmt.Sprint(*torrent.Eta) + "\n"
+	//0 Info 1 peers 2 files
+	info := fmt.Sprintf("Name: %s \n\nStatus: %v \n\nSize: %v \n\nDate Added: %v \n\nError: %v \n\nETA: %v", *torrent.Name, parseStatus(torrent), string(torrent.TotalSize.GBString()), torrent.AddedDate.String(), *torrent.ErrorString, *torrent.Eta)
 
-	peers := "Placeholder"
-	// p := *torrent.Peers[0]
-	// peers += "Peer Address: " + p.Address + "\n"
-	// peers += "Download Speed: " + p.ConvertDownloadSpeed().ByteString() + "\n"
-	files := "Placeholder"
+	var peers string
+	p := torrent.Peers
+	if len(p) > 0 {
+		for _, peer := range p {
+			peers += fmt.Sprintf("Peer Info:\n%s\nAddress: %s\nDownload Speed %s\nProgress: %v\nRate to Client: %v\nRate to Peer: %v\n\n", peer.ClientName, peer.Address, peer.ConvertDownloadSpeed().ByteString(), peer.Progress, peer.RateToClient, peer.RateToPeer)
+		}
+	} else {
+		peers = "No Peers or maidens to be seen" + "\n\n"
+	}
+
+	files := fmt.Sprintf("Files:\n\n")
+	f := torrent.Files
+
+	for _, file := range f {
+		files += fmt.Sprintf("%s\n", file.Name)
+	}
+
 	// files += "Files?" + *torrent.Pieces + "\n"
-	infoModel.TabContent = []string{info, files, peers}
+
+	infoModel.TabContent = []string{info, peers, files}
 	return infoModel
 }
 
@@ -354,6 +362,10 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 	case torrentInfo:
 		createInfoModel(trans.Torrent(msg))
 
