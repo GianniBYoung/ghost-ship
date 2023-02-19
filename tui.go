@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 )
 
 type torrentInfo trans.Torrent
+type torrentSelected map[int]trans.Torrent
 type errMsg struct{ err error }
 type status int
 
@@ -32,7 +34,7 @@ func (m InfoModel) Init() tea.Cmd { return nil }
 func (e errMsg) Error() string    { return e.err.Error() }
 
 type TorrentTable struct {
-	selected map[int]struct{} // which to-do items are selected
+	selected map[int]trans.Torrent
 	table    table.Model
 	torrent  trans.Torrent
 	height   int
@@ -147,16 +149,34 @@ func getTorrentInfo(m Model, offset int) tea.Cmd {
 	}
 }
 
+// adds a torrent to the selcted list
+func selectTorrent(m Model) tea.Cmd {
+	return func() tea.Msg {
+		offset := 1
+		cursor := m.torrentTable.table.Cursor()
+		_, exists := m.torrentTable.selected[cursor]
+		if exists {
+			delete(m.torrentTable.selected, cursor)
+		} else {
+			torrent, _ := TransmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(cursor + offset)})
+			m.torrentTable.selected[m.torrentTable.table.Cursor()] = torrent[0]
+		}
+
+		return torrentSelected(m.torrentTable.selected)
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// init tabs here
+		// init tabs hkre
 		if !m.loaded {
 			m.torrentTable.height = msg.Height - 25
 			m.torrentTable.initTable(m.torrentTable.height)
+			m.torrentTable.selected = make(map[int]trans.Torrent)
 			m.loaded = true
 			return m, cmd
 		}
@@ -168,12 +188,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case torrentInfo:
 		m.torrentTable.torrent = trans.Torrent(torrentInfo(msg))
 
+	case torrentSelected:
+		m.torrentTable.selected = msg
+
 	case tea.KeyMsg:
 
 		switch msg.String() {
 
 		case "enter":
-			cmd = getTorrentInfo(m, 0)
+			// cmd = getTorrentInfo(m, 0)
+			cmd = selectTorrent(m)
 			cmds = append(cmds, cmd)
 			return m, cmd
 
@@ -216,11 +240,19 @@ func (m Model) View() string {
 	cursor := strconv.Itoa(int(m.torrentTable.table.Cursor()))
 	torrentName := "N/A"
 	var tSplit string
+	var selectedTorrents string
 	if m.loaded {
 		torrentName = *m.torrentTable.torrent.Name
 		tSplit = m.torrentTable.table.SelectedRow()[0]
+		var selected []string
+		for _, element := range m.torrentTable.selected {
+			selected = append(selected, *element.Name)
+		}
+		sort.Strings(selected)
+		selectedTorrents = fmt.Sprintln(strings.Join(selected, "\n"))
+
 	}
-	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName + "\nID: " + tSplit
+	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName + "\nID: " + tSplit + "\n" + selectedTorrents
 }
 
 func renderTorrentInfo(m InfoModel) string {
