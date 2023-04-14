@@ -451,8 +451,12 @@ func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
-		case tea.KeyEnter, tea.KeyCtrlC, tea.KeyEsc:
+
+		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
+
+		case tea.KeyEnter:
+			return m, cmd
 		}
 
 	// We handle errors just like any other message
@@ -467,8 +471,8 @@ func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m TextInputModel) View() string {
 	return fmt.Sprintf(
-		"What’s your favorite Pokémon?\n\n%s\n\n%s",
+		"Enter New Location\n\n%s\n\n%s",
 		m.textInput.View(),
-		"(esc to quit)",
-	) + "\n"
+		"The following torrents will be moved to `"+m.textInput.Value(),
+	) + "`:\n"
 }
