@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	trans "github.com/hekmon/transmissionrpc/v2"
@@ -26,12 +27,14 @@ var baseStyle = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderF
 const (
 	MainModel status = iota
 	InfoView
+	TextInputView
 )
 
-func NewModel() *Model            { return &Model{} }
-func (m Model) Init() tea.Cmd     { return nil }
-func (m InfoModel) Init() tea.Cmd { return nil }
-func (e errMsg) Error() string    { return e.err.Error() }
+func NewModel() *Model                 { return &Model{} }
+func (m Model) Init() tea.Cmd          { return nil }
+func (m InfoModel) Init() tea.Cmd      { return nil }
+func (m TextInputModel) Init() tea.Cmd { return textinput.Blink }
+func (e errMsg) Error() string         { return e.err.Error() }
 
 type TorrentTable struct {
 	selected map[int]trans.Torrent
@@ -57,6 +60,12 @@ type InfoModel struct {
 	width      int
 }
 
+type TextInputModel struct {
+	textInput textinput.Model
+	focused   status
+	err       error
+}
+
 func (m *Model) Next() {
 	if m.state == MainModel {
 		m.state = InfoView
@@ -79,6 +88,13 @@ func NewInfoModel(focused status) *InfoModel {
 	infoModel.TabContent = []string{"Selected Torrent Info Will Appear Here.", "Peer Information:", "File Information"}
 	infoModel.activeTab = 0
 	return infoModel
+}
+
+func NewTextInputModel(focused status) TextInputModel {
+	textInputModel := textinput.New()
+	textInputModel.Placeholder = "Set Torrent Location"
+	textInputModel.Focus()
+	return TextInputModel{textInput: textInputModel, err: nil}
 }
 
 func (m *TorrentTable) updateTable() {
@@ -172,7 +188,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// init tabs hkre
+		// init tabs here
 		if !m.loaded {
 			m.torrentTable.height = msg.Height - 25
 			m.torrentTable.initTable(m.torrentTable.height)
@@ -214,13 +230,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Prev()
 
 		case "m":
-			TransmissionClient.TorrentSetLocation(context.TODO(), *m.torrentTable.torrent.ID, "/media/unit/ghost-ship-testing", true)
+			TransmissionClient.TorrentSetLocation(context.TODO(), *m.torrentTable.torrent.ID, "", true)
 			m.torrentTable.updateTable()
 
 		case "l":
 			Models[MainModel] = m
 			Models[InfoView] = createInfoModel(m.torrentTable.torrent)
 			return Models[InfoView].Update(nil)
+
+		case "M":
+			Models[MainModel] = m
+			Models[TextInputView] = NewTextInputModel(1)
+			return Models[TextInputView].Update(nil)
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -422,4 +443,32 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m InfoModel) View() string {
 	return renderTorrentInfo(m)
+}
+
+func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEnter, tea.KeyCtrlC, tea.KeyEsc:
+			return m, tea.Quit
+		}
+
+	// We handle errors just like any other message
+	case errMsg:
+		m.err = msg
+		return m, nil
+	}
+
+	m.textInput, cmd = m.textInput.Update(msg)
+	return m, cmd
+}
+
+func (m TextInputModel) View() string {
+	return fmt.Sprintf(
+		"What’s your favorite Pokémon?\n\n%s\n\n%s",
+		m.textInput.View(),
+		"(esc to quit)",
+	) + "\n"
 }
