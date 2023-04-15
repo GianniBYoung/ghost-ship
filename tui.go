@@ -206,8 +206,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return Models[InfoView].Update(nil)
 
 		case "M":
+			cmd = getTorrentInfo(m, 0)
 			Models[MainModel] = m
-			Models[TextInputView] = NewTextInputModel(1)
+			Models[TextInputView] = NewTextInputModel(1, int(*m.torrentTable.torrent.ID))
 			return Models[TextInputView].Update(nil)
 
 		case "ctrl+c", "q":

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	trans "github.com/hekmon/transmissionrpc/v2"
 )
 
 func (m TextInputModel) Init() tea.Cmd { return textinput.Blink }
@@ -12,16 +14,19 @@ func (m TextInputModel) Init() tea.Cmd { return textinput.Blink }
 type TextInputModel struct {
 	textInput textinput.Model
 	focused   status
+	torrent   trans.Torrent
 	err       error
 }
 
-func NewTextInputModel(focused status) TextInputModel {
+func NewTextInputModel(focused status, torrentID int) TextInputModel {
 	textInputModel := textinput.New()
-	textInputModel.Placeholder = "Set Torrent Location"
+	textInputModel.Placeholder = "Enter New Path"
 	textInputModel.Focus()
-	return TextInputModel{textInput: textInputModel, err: nil}
+	torrent, _ := TransmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(torrentID)})
+	return TextInputModel{textInput: textInputModel, err: nil, torrent: torrent[0]}
 }
 
+//TransmissionClient.TorrentSetLocation(context.TODO(), *m.torrentTable.torrent.ID, "", true)
 func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -36,7 +41,6 @@ func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-	// We handle errors just like any other message
 	case errMsg:
 		m.err = msg
 		return m, nil
@@ -48,8 +52,13 @@ func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m TextInputModel) View() string {
 	return fmt.Sprintf(
-		"Enter New Location\n\n%s\n\n%s",
+		`The Selected torrent is %s located at %s
+Enter New Location:
+%s
+The following torrents will be moved to "%s`,
+		*m.torrent.Name,
+		*m.torrent.DownloadDir,
 		m.textInput.View(),
-		"The following torrents will be moved to `"+m.textInput.Value(),
-	) + "`:\n"
+		m.textInput.Value(),
+	) + "\":\n"
 }

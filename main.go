@@ -9,7 +9,7 @@ import (
 
 func main() {
 	transmissionClientInit()
-	Models = []tea.Model{NewModel(), NewInfoModel(InfoView), NewTextInputModel(TextInputView)}
+	Models = []tea.Model{NewModel(), NewInfoModel(InfoView), NewTextInputModel(TextInputView, 1)}
 
 	m := Models[MainModel]
 
