@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	trans "github.com/hekmon/transmissionrpc/v2"
@@ -30,11 +29,9 @@ const (
 	TextInputView
 )
 
-func NewModel() *Model                 { return &Model{} }
-func (m Model) Init() tea.Cmd          { return nil }
-func (m InfoModel) Init() tea.Cmd      { return nil }
-func (m TextInputModel) Init() tea.Cmd { return textinput.Blink }
-func (e errMsg) Error() string         { return e.err.Error() }
+func NewModel() *Model         { return &Model{} }
+func (m Model) Init() tea.Cmd  { return nil }
+func (e errMsg) Error() string { return e.err.Error() }
 
 type TorrentTable struct {
 	selected map[int]trans.Torrent
@@ -51,21 +48,6 @@ type Model struct {
 	loaded       bool
 }
 
-type InfoModel struct {
-	Tabs       []string
-	TabContent []string
-	activeTab  int
-	focused    status
-	height     int
-	width      int
-}
-
-type TextInputModel struct {
-	textInput textinput.Model
-	focused   status
-	err       error
-}
-
 func (m *Model) Next() {
 	if m.state == MainModel {
 		m.state = InfoView
@@ -80,21 +62,6 @@ func (m *Model) Prev() {
 	} else {
 		m.state--
 	}
-}
-
-func NewInfoModel(focused status) *InfoModel {
-	infoModel := &InfoModel{focused: focused}
-	infoModel.Tabs = []string{"Info", "Peers", "Files"}
-	infoModel.TabContent = []string{"Selected Torrent Info Will Appear Here.", "Peer Information:", "File Information"}
-	infoModel.activeTab = 0
-	return infoModel
-}
-
-func NewTextInputModel(focused status) TextInputModel {
-	textInputModel := textinput.New()
-	textInputModel.Placeholder = "Set Torrent Location"
-	textInputModel.Focus()
-	return TextInputModel{textInput: textInputModel, err: nil}
 }
 
 func (m *TorrentTable) updateTable() {
@@ -276,39 +243,6 @@ func (m Model) View() string {
 	return baseStyle.Render(m.torrentTable.table.View()) + "\n" + "Cursor: " + cursor + "\n" + "Torrent: " + torrentName + "\nID: " + tSplit + "\n" + selectedTorrents
 }
 
-func renderTorrentInfo(m InfoModel) string {
-	doc := strings.Builder{}
-	var renderedTabs []string
-	for i, t := range m.Tabs {
-		var style lipgloss.Style
-		isFirst, isLast, isActive := i == 0, i == len(m.Tabs)-1, i == m.activeTab
-		if isActive {
-			style = activeTabStyle.Copy()
-		} else {
-			style = inactiveTabStyle.Copy()
-		}
-		border, _, _, _, _ := style.GetBorder()
-		if isFirst && isActive {
-			border.BottomLeft = "│"
-		} else if isFirst && !isActive {
-			border.BottomLeft = "├"
-		} else if isLast && isActive {
-			border.BottomRight = "│"
-		} else if isLast && !isActive {
-			border.BottomRight = "┤"
-		}
-		style = style.Border(border)
-		renderedTabs = append(renderedTabs, style.Render(t))
-	}
-
-	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
-	doc.WriteString(row)
-	doc.WriteString("\n")
-	content := lipgloss.JoinHorizontal(lipgloss.Top, windowStyle.Render(m.TabContent[m.activeTab]))
-	doc.WriteString(content)
-	return docStyle.Render(doc.String())
-
-}
 func getAllTorrents(transmissionClient trans.Client) []trans.Torrent {
 	torrents, err := transmissionClient.TorrentGetAll(context.TODO())
 	if err != nil {
@@ -338,141 +272,4 @@ func parseStatus(torrent trans.Torrent) string {
 	}
 	return "Status unknown???"
 
-}
-
-func buildRow(torrent trans.Torrent) table.Row {
-	torrentID := strconv.Itoa(int(*torrent.ID))
-	torrentStatus := parseStatus(torrent)
-	// torrentSize := *torrent.TotalSize
-	torrentSize := string(torrent.TotalSize.GBString())
-	return table.Row{torrentID, string(*torrent.Name), torrentStatus, torrentSize, *torrent.DownloadDir}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
-	border := lipgloss.RoundedBorder()
-	border.BottomLeft = left
-	border.Bottom = middle
-	border.BottomRight = right
-	return border
-}
-
-var (
-	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder   = tabBorderWithBottom("┘", "─", "└")
-	// figure out how to manage height and scroll
-	docStyle         = lipgloss.NewStyle().Padding(1, 2, 1, 2).MaxWidth(200).MaxHeight(50)
-	highlightColor   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	inactiveTabStyle = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
-	activeTabStyle   = inactiveTabStyle.Copy().Border(activeTabBorder, true)
-	windowStyle      = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
-)
-
-func createInfoModel(torrent trans.Torrent) (infoModel InfoModel) {
-	infoModel.Tabs = []string{"Info", "Peers", "Files"}
-	infoModel.activeTab = 0
-	//0 Info 1 peers 2 files
-	info := fmt.Sprintf("Name: %s \n\nStatus: %v \n\nSize: %v \n\nDate Added: %v \n\nError: %v \n\nETA: %v", *torrent.Name, parseStatus(torrent), string(torrent.TotalSize.GBString()), torrent.AddedDate.String(), *torrent.ErrorString, *torrent.Eta)
-
-	var peers string
-	p := torrent.Peers
-	if len(p) > 0 {
-		for _, peer := range p {
-			peers += fmt.Sprintf("Peer Info:\n%s\nAddress: %s\nDownload Speed %s\nProgress: %v\nRate to Client: %v\nRate to Peer: %v\n\n", peer.ClientName, peer.Address, peer.ConvertDownloadSpeed().ByteString(), peer.Progress, peer.RateToClient, peer.RateToPeer)
-		}
-	} else {
-		peers = "No Peers or maidens to be seen" + "\n\n"
-	}
-
-	files := fmt.Sprintf("Files:\n\n")
-	f := torrent.Files
-
-	for _, file := range f {
-		files += fmt.Sprintf("%s\n", file.Name)
-	}
-
-	// files += "Files?" + *torrent.Pieces + "\n"
-
-	infoModel.TabContent = []string{info, peers, files}
-	return infoModel
-}
-
-func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-
-	case torrentInfo:
-		createInfoModel(trans.Torrent(msg))
-
-	case tea.KeyMsg:
-		switch msg.String() {
-
-		case "right", "l":
-			m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
-		case "left", "h":
-			m.activeTab = max(m.activeTab-1, 0)
-
-		case "ctrl+c", "q":
-			return m, tea.Quit
-
-		case "tab":
-			return Models[MainModel].Update(nil)
-		}
-
-	}
-
-	return m, cmd
-}
-
-func (m InfoModel) View() string {
-	return renderTorrentInfo(m)
-}
-
-func (m TextInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-
-		case tea.KeyCtrlC, tea.KeyEsc:
-			return m, tea.Quit
-
-		case tea.KeyEnter:
-			return m, cmd
-		}
-
-	// We handle errors just like any other message
-	case errMsg:
-		m.err = msg
-		return m, nil
-	}
-
-	m.textInput, cmd = m.textInput.Update(msg)
-	return m, cmd
-}
-
-func (m TextInputModel) View() string {
-	return fmt.Sprintf(
-		"Enter New Location\n\n%s\n\n%s",
-		m.textInput.View(),
-		"The following torrents will be moved to `"+m.textInput.Value(),
-	) + "`:\n"
 }
