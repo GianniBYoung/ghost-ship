@@ -17,6 +17,7 @@ import (
 type torrentInfo trans.Torrent
 type torrentSelected map[int]trans.Torrent
 type errMsg struct{ err error }
+type callBackMsg bool
 type status int
 
 var Models []tea.Model
@@ -34,10 +35,10 @@ func (m Model) Init() tea.Cmd  { return nil }
 func (e errMsg) Error() string { return e.err.Error() }
 
 type TorrentTable struct {
-	selected map[int]trans.Torrent
-	table    table.Model
-	torrent  trans.Torrent
-	height   int
+	selectedTorrents map[int]trans.Torrent
+	table            table.Model
+	torrent          trans.Torrent
+	height           int
 }
 
 type Model struct {
@@ -75,7 +76,7 @@ func (m *TorrentTable) updateTable() {
 	columns := []table.Column{
 		{Title: "ID", Width: 4},
 		{Title: "Name", Width: 45},
-		{Title: "Status", Width: 20},
+		{Title: "Status", Width: 15},
 		{Title: "Size", Width: 8},
 		{Title: "Location", Width: 35},
 	}
@@ -137,15 +138,15 @@ func selectTorrent(m Model) tea.Cmd {
 	return func() tea.Msg {
 		offset := 1
 		cursor := m.torrentTable.table.Cursor()
-		_, exists := m.torrentTable.selected[cursor]
+		_, exists := m.torrentTable.selectedTorrents[cursor]
 		if exists {
-			delete(m.torrentTable.selected, cursor)
+			delete(m.torrentTable.selectedTorrents, cursor)
 		} else {
 			torrent, _ := TransmissionClient.TorrentGet(context.TODO(), torrentFields, []int64{int64(cursor + offset)})
-			m.torrentTable.selected[m.torrentTable.table.Cursor()] = torrent[0]
+			m.torrentTable.selectedTorrents[m.torrentTable.table.Cursor()] = torrent[0]
 		}
 
-		return torrentSelected(m.torrentTable.selected)
+		return torrentSelected(m.torrentTable.selectedTorrents)
 	}
 }
 
@@ -159,7 +160,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.loaded {
 			m.torrentTable.height = msg.Height - 25
 			m.torrentTable.initTable(m.torrentTable.height)
-			m.torrentTable.selected = make(map[int]trans.Torrent)
+			m.torrentTable.selectedTorrents = make(map[int]trans.Torrent)
 			m.loaded = true
 			return m, cmd
 		}
@@ -172,14 +173,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.torrentTable.torrent = trans.Torrent(torrentInfo(msg))
 
 	case torrentSelected:
-		m.torrentTable.selected = msg
+		m.torrentTable.selectedTorrents = msg
+
+	case callBackMsg:
+		m.torrentTable.updateTable()
 
 	case tea.KeyMsg:
 
 		switch msg.String() {
 
 		case "enter":
-			// cmd = getTorrentInfo(m, 0)
 			cmd = selectTorrent(m)
 			cmds = append(cmds, cmd)
 			return m, cmd
@@ -196,19 +199,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left", "h":
 			m.Prev()
 
-		case "m":
-			TransmissionClient.TorrentSetLocation(context.TODO(), *m.torrentTable.torrent.ID, "", true)
-			m.torrentTable.updateTable()
-
 		case "l":
 			Models[MainModel] = m
 			Models[InfoView] = createInfoModel(m.torrentTable.torrent)
 			return Models[InfoView].Update(nil)
 
-		case "M":
+		case "M", "m":
 			cmd = getTorrentInfo(m, 0)
 			Models[MainModel] = m
-			Models[TextInputView] = NewTextInputModel(1, int(*m.torrentTable.torrent.ID))
+			Models[TextInputView] = NewTextInputModel(int(*m.torrentTable.torrent.ID), m.torrentTable.selectedTorrents)
 			return Models[TextInputView].Update(nil)
 
 		case "ctrl+c", "q":
@@ -234,7 +233,7 @@ func (m Model) View() string {
 		torrentName = *m.torrentTable.torrent.Name
 		tSplit = m.torrentTable.table.SelectedRow()[0]
 		var selected []string
-		for _, element := range m.torrentTable.selected {
+		for _, element := range m.torrentTable.selectedTorrents {
 			selected = append(selected, *element.Name)
 		}
 		sort.Strings(selected)

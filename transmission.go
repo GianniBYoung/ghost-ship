@@ -43,3 +43,7 @@ func setupCheck() *trans.Client {
 	return client
 
 }
+
+func MoveTorrent(id int64, location string) error {
+	return TransmissionClient.TorrentSetLocation(context.TODO(), id, location, true)
+}

@@ -5,11 +5,12 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	trans "github.com/hekmon/transmissionrpc/v2"
 )
 
 func main() {
 	transmissionClientInit()
-	Models = []tea.Model{NewModel(), NewInfoModel(InfoView), NewTextInputModel(TextInputView, 1)}
+	Models = []tea.Model{NewModel(), NewInfoModel(InfoView), NewTextInputModel(1, make(map[int]trans.Torrent))}
 
 	m := Models[MainModel]
 
