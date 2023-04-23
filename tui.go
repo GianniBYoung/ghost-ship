@@ -39,6 +39,7 @@ type TorrentTable struct {
 	table            table.Model
 	torrent          trans.Torrent
 	height           int
+	width            int
 }
 
 type Model struct {
@@ -65,7 +66,15 @@ func (m *Model) Prev() {
 	}
 }
 
-func (m *TorrentTable) updateTable() {
+func buildRow(torrent trans.Torrent) table.Row {
+	ID := strconv.Itoa(int(*torrent.ID))
+	status := parseStatus(torrent)
+	size := string(torrent.TotalSize.GBString())
+	ratio := fmt.Sprintf("%.2f", *torrent.UploadRatio)
+	return table.Row{ID, string(*torrent.Name), status, size, ratio, *torrent.DownloadDir}
+}
+
+func (m *TorrentTable) updateTable(height, width int) {
 	allTorrents := getAllTorrents(*TransmissionClient)
 	var rows []table.Row
 
@@ -78,35 +87,11 @@ func (m *TorrentTable) updateTable() {
 		{Title: "Name", Width: 45},
 		{Title: "Status", Width: 15},
 		{Title: "Size", Width: 8},
+		{Title: "Ratio", Width: 6},
 		{Title: "Location", Width: 35},
 	}
 
-	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height))
-	style := table.DefaultStyles()
-	style.Header = style.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).BorderBottom(true).Bold(false)
-	style.Selected = style.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(false)
-	myTable.SetStyles(style)
-
-	m.table = myTable
-}
-
-func (m *TorrentTable) initTable(height int) {
-	allTorrents := getAllTorrents(*TransmissionClient)
-	var rows []table.Row
-
-	for _, torrent := range allTorrents {
-		rows = append(rows, buildRow(torrent))
-	}
-
-	columns := []table.Column{
-		{Title: "ID", Width: 4},
-		{Title: "Name", Width: 45},
-		{Title: "Status", Width: 20},
-		{Title: "Size", Width: 8},
-		{Title: "Location", Width: 35},
-	}
-
-	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(height))
+	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height), table.WithWidth(m.width))
 	style := table.DefaultStyles()
 	style.Header = style.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).BorderBottom(true).Bold(false)
 	style.Selected = style.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(false)
@@ -114,7 +99,6 @@ func (m *TorrentTable) initTable(height int) {
 
 	m.torrent = allTorrents[0]
 	m.table = myTable
-
 }
 
 // takes a torrentID and returns the torrent
@@ -156,10 +140,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// init tabs here
 		if !m.loaded {
 			m.torrentTable.height = msg.Height - 25
-			m.torrentTable.initTable(m.torrentTable.height)
+			m.torrentTable.width = msg.Width - 5
+			m.torrentTable.updateTable(m.torrentTable.height, m.torrentTable.width)
 			m.torrentTable.selectedTorrents = make(map[int]trans.Torrent)
 			m.loaded = true
 			return m, cmd
@@ -176,7 +160,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.torrentTable.selectedTorrents = msg
 
 	case callBackMsg:
-		m.torrentTable.updateTable()
+		m.torrentTable.updateTable(m.torrentTable.height, m.torrentTable.width)
 
 	case tea.KeyMsg:
 
