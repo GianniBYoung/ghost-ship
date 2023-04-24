@@ -66,7 +66,7 @@ func (m *Model) Prev() {
 	}
 }
 
-func buildRow(torrent trans.Torrent) table.Row {
+func buildRow(torrent trans.Torrent, columns []table.Column) table.Row {
 	ID := strconv.Itoa(int(*torrent.ID))
 	status := parseStatus(torrent)
 	size := string(torrent.TotalSize.GBString())
@@ -74,24 +74,60 @@ func buildRow(torrent trans.Torrent) table.Row {
 	return table.Row{ID, string(*torrent.Name), status, size, ratio, *torrent.DownloadDir}
 }
 
+func GetColumns() []table.Column {
+
+	allColumns := map[string]bool{
+		"ID":            true,
+		"Name":          true,
+		"Status":        true,
+		"Size":          true,
+		"Ratio":         true,
+		"Location":      true,
+		"Activity Date": false,
+		"Download Rate": false,
+		"Upload Rate":   false,
+		"Error":         false,
+		"Labels":        false,
+		"Percent Done":  false,
+		"Trackers":      false,
+		"Uploaded Ever": false,
+		"":              true,
+	}
+
+	var visibleColumns []table.Column
+
+	for key := range allColumns {
+
+		if allColumns[key] {
+			column := table.Column{Title: key, Width: 4}
+			visibleColumns = append(visibleColumns, column)
+		}
+
+	}
+	return visibleColumns
+
+}
+
 func (m *TorrentTable) updateTable(height, width int) {
 	allTorrents := getAllTorrents(*TransmissionClient)
+	visibleColumns := GetColumns()
+
 	var rows []table.Row
 
 	for _, torrent := range allTorrents {
-		rows = append(rows, buildRow(torrent))
+		rows = append(rows, buildRow(torrent, visibleColumns))
 	}
 
-	columns := []table.Column{
-		{Title: "ID", Width: 4},
-		{Title: "Name", Width: 45},
-		{Title: "Status", Width: 15},
-		{Title: "Size", Width: 8},
-		{Title: "Ratio", Width: 6},
-		{Title: "Location", Width: 35},
-	}
+	// 	visibleColumns := []table.Column{
+	// 		{Title: "ID", Width: 4},
+	// 		{Title: "Name", Width: 45},
+	// 		{Title: "Status", Width: 15},
+	// 		{Title: "Size", Width: 8},
+	// 		{Title: "Ratio", Width: 6},
+	// 		{Title: "Location", Width: 35},
+	// 	}
 
-	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height), table.WithWidth(m.width))
+	myTable := table.New(table.WithColumns(visibleColumns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height), table.WithWidth(m.width))
 	style := table.DefaultStyles()
 	style.Header = style.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).BorderBottom(true).Bold(false)
 	style.Selected = style.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(false)
