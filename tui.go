@@ -23,6 +23,22 @@ type status int
 var Models []tea.Model
 var torrentFields = []string{"activityDate", "addedDate", "bandwidthPriority", "comment", "corruptEver", "creator", "dateCreated", "desiredAvailable", "doneDate", "downloadDir", "downloadedEver", "downloadLimit", "downloadLimited", "error", "errorString", "eta", "etaIdle", "files", "fileStats", "hashString", "haveUnchecked", "haveValid", "honorsSessionLimits", "id", "isFinished", "isPrivate", "isStalled", "leftUntilDone", "magnetLink", "manualAnnounceTime", "maxConnectedPeers", "metadataPercentComplete", "name", "peer-limit", "peers", "peersConnected", "peersFrom", "peersGettingFromUs", "peersSendingToUs", "percentDone", "pieces", "pieceCount", "pieceSize", "priorities", "queuePosition", "rateDownload", "rateUpload", "recheckProgress", "secondsDownloading", "secondsSeeding", "seedIdleLimit", "seedIdleMode", "seedRatioLimit", "seedRatioMode", "sizeWhenDone", "startDate", "status", "trackers", "trackerStats", "totalSize", "torrentFile", "uploadedEver", "uploadLimit", "uploadLimited", "uploadRatio", "wanted", "webseeds", "webseedsSendingToUs"}
 var baseStyle = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
+var headers = Header{
+	ID:           true,
+	Name:         true,
+	Status:       true,
+	Size:         true,
+	Ratio:        true,
+	Location:     true,
+	ActivityDate: false,
+	DownloadRate: false,
+	UploadRate:   false,
+	Error:        false,
+	Labels:       false,
+	PercentDone:  false,
+	Trackers:     false,
+	UploadedEver: false,
+}
 
 const (
 	MainModel status = iota
@@ -66,58 +82,99 @@ func (m *Model) Prev() {
 	}
 }
 
-func buildRow(torrent trans.Torrent, columns []table.Column) table.Row {
-	ID := strconv.Itoa(int(*torrent.ID))
-	status := parseStatus(torrent)
-	size := string(torrent.TotalSize.GBString())
-	ratio := fmt.Sprintf("%.2f", *torrent.UploadRatio)
-	return table.Row{ID, string(*torrent.Name), status, size, ratio, *torrent.DownloadDir}
-}
+func buildRow(torrent trans.Torrent, columns map[string]bool) table.Row {
+	var row table.Row
+	for key := range columns {
+		switch key {
+		case "ID":
+			row = append(row, strconv.Itoa(int(*torrent.ID)))
 
-func GetColumns() []table.Column {
+		case "Name":
+			row = append(row, *torrent.Name)
 
-	allColumns := map[string]bool{
-		"ID":            true,
-		"Name":          true,
-		"Status":        true,
-		"Size":          true,
-		"Ratio":         true,
-		"Location":      true,
-		"Activity Date": false,
-		"Download Rate": false,
-		"Upload Rate":   false,
-		"Error":         false,
-		"Labels":        false,
-		"Percent Done":  false,
-		"Trackers":      false,
-		"Uploaded Ever": false,
-		"":              true,
-	}
+		case "Status":
+			row = append(row, parseStatus(torrent))
 
-	var visibleColumns []table.Column
+		case "Size":
+			row = append(row, string(torrent.TotalSize.GBString()))
 
-	for key := range allColumns {
+		case "Ratio":
+			row = append(row, fmt.Sprintf("%.2f", *torrent.UploadRatio))
 
-		if allColumns[key] {
-			column := table.Column{Title: key, Width: 4}
-			visibleColumns = append(visibleColumns, column)
+		case "Location":
+			row = append(row, *torrent.DownloadDir)
+
 		}
 
 	}
-	return visibleColumns
+	return row
+}
 
+// just make a config file that can specify the following:
+/*
+column order
+creds
+defualt sort
+color scheme eventually lol
+bookmarks/favorites for suggestive use
+*/
+
+func SetColumns(t TorrentTable) []table.Column {
+	var visibleColumns []table.Column
+	// totalColumns := len(columns)
+	// maxColumnSize := width / totalColumns
+
+	if columns[key] {
+		column := table.Column{Title: key, Width: t.width}
+		visibleColumns = append(visibleColumns, column)
+	}
+
+	return visibleColumns
+}
+
+type Header struct {
+	ID           bool
+	Name         bool
+	Status       bool
+	Size         bool
+	Ratio        bool
+	Location     bool
+	ActivityDate bool
+	DownloadRate bool
+	UploadRate   bool
+	Error        bool
+	Labels       bool
+	PercentDone  bool
+	Trackers     bool
+	UploadedEver bool
 }
 
 func (m *TorrentTable) updateTable(height, width int) {
 	allTorrents := getAllTorrents(*TransmissionClient)
-	visibleColumns := GetColumns()
+
+	// headers := map[string]bool{
+	// 	"ID":            true,
+	// 	"Name":          true,
+	// 	"Status":        true,
+	// 	"Size":          true,
+	// 	"Ratio":         true,
+	// 	"Location":      true,
+	// 	"Activity Date": false,
+	// 	"Download Rate": false,
+	// 	"Upload Rate":   false,
+	// 	"Error":         false,
+	// 	"Labels":        false,
+	// 	"Percent Done":  false,
+	// 	"Trackers":      false,
+	// 	"Uploaded Ever": false,
+	// }
 
 	var rows []table.Row
-
 	for _, torrent := range allTorrents {
-		rows = append(rows, buildRow(torrent, visibleColumns))
+		rows = append(rows, buildRow(torrent, headers))
 	}
 
+	visibleColumns := SetColumns(headers, m.height, m.width)
 	// 	visibleColumns := []table.Column{
 	// 		{Title: "ID", Width: 4},
 	// 		{Title: "Name", Width: 45},
