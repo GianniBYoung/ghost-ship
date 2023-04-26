@@ -94,15 +94,6 @@ func buildRow(torrent trans.Torrent, columns map[string]bool) table.Row {
 	return row
 }
 
-// just make a config file that can specify the following:
-/*
-column order
-creds
-defualt sort
-color scheme eventually lol
-bookmarks/favorites for suggestive use
-*/
-
 func SetColumns(t TorrentTable, columns map[string]bool) []table.Column {
 	var visibleColumns []table.Column
 	// totalColumns := len(columns)
