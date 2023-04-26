@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kelseyhightower/envconfig"
-	"gopkg.in/yaml.v2"
-
 	trans "github.com/hekmon/transmissionrpc/v2"
+	"github.com/kelseyhightower/envconfig"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -46,8 +45,16 @@ func readConfig(cfg *Config) {
 func readEnvironmentalVariables(cfg *Config) {
 	err := envconfig.Process("", cfg)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error Reading Environmental Variables: %s", err)
 	}
+
+	fmt.Println(Cfg.UI.Columns)
+	fmt.Println(Cfg.Bookmarks)
+	fmt.Println(Cfg.Server.IP)
+	for _, value := range Cfg.UI.Columns {
+		fmt.Println(value)
+	}
+
 }
 
 var Cfg Config
@@ -58,7 +65,7 @@ func transmissionClientInit() {
 }
 
 func setupCheck() *trans.Client {
-	// readConfig(&Cfg)
+	readConfig(&Cfg)
 	readEnvironmentalVariables(&Cfg)
 	transmissionPassword := Cfg.Server.Password
 	transmissionUserName := Cfg.Server.Username

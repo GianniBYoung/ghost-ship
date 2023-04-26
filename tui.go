@@ -94,16 +94,14 @@ func buildRow(torrent trans.Torrent, columns map[string]bool) table.Row {
 	return row
 }
 
-func SetColumns(t TorrentTable, columns map[string]bool) []table.Column {
+func SetColumns(t TorrentTable) []table.Column {
 	var visibleColumns []table.Column
 	// totalColumns := len(columns)
 	// maxColumnSize := width / totalColumns
 
-	for key := range columns {
-		if columns[key] {
-			column := table.Column{Title: key, Width: t.width - t.width + 6}
-			visibleColumns = append(visibleColumns, column)
-		}
+	for _, c := range Cfg.UI.Columns {
+		column := table.Column{Title: c, Width: t.width - t.width + 6}
+		visibleColumns = append(visibleColumns, column)
 	}
 
 	return visibleColumns
@@ -129,7 +127,7 @@ func (m *TorrentTable) updateTable(height, width int) {
 		"Uploaded Ever": false,
 	}
 
-	visibleColumns := SetColumns(*m, headers)
+	visibleColumns := SetColumns(*m)
 	var rows []table.Row
 	for _, torrent := range allTorrents {
 		rows = append(rows, buildRow(torrent, headers))

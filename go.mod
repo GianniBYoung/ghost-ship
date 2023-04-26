@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.6.0
 	github.com/hekmon/transmissionrpc/v2 v2.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
