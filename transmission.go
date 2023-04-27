@@ -51,10 +51,6 @@ func readEnvironmentalVariables(cfg *Config) {
 	fmt.Println(Cfg.UI.Columns)
 	fmt.Println(Cfg.Bookmarks)
 	fmt.Println(Cfg.Server.IP)
-	for _, value := range Cfg.UI.Columns {
-		fmt.Println(value)
-	}
-
 }
 
 var Cfg Config

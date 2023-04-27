@@ -66,9 +66,10 @@ func (m *Model) Prev() {
 	}
 }
 
-func buildRow(torrent trans.Torrent, columns map[string]bool) table.Row {
+func buildRow(torrent trans.Torrent, headers []string) table.Row {
 	var row table.Row
-	for key := range columns {
+
+	for _, key := range headers {
 		switch key {
 		case "ID":
 			row = append(row, strconv.Itoa(int(*torrent.ID)))
@@ -94,40 +95,45 @@ func buildRow(torrent trans.Torrent, columns map[string]bool) table.Row {
 	return row
 }
 
-func SetColumns(t TorrentTable) []table.Column {
-	var visibleColumns []table.Column
-	// totalColumns := len(columns)
-	// maxColumnSize := width / totalColumns
+func SetColumns(t TorrentTable) (columns []table.Column, headers []string) {
+
+	totalColumns := 1
+	for range Cfg.UI.Columns {
+		totalColumns++
+	}
+
+	maxColumnSize := t.width / totalColumns
 
 	for _, c := range Cfg.UI.Columns {
-		column := table.Column{Title: c, Width: t.width - t.width + 6}
-		visibleColumns = append(visibleColumns, column)
+		column := table.Column{Title: c, Width: maxColumnSize}
+		columns = append(columns, column)
+		headers = append(headers, c)
 	}
 
-	return visibleColumns
+	return columns, headers
 }
 
-func (m *TorrentTable) updateTable(height, width int) {
+func (m *TorrentTable) updateTable() {
 	allTorrents := getAllTorrents(*TransmissionClient)
 
-	headers := map[string]bool{
-		"ID":            true,
-		"Name":          true,
-		"Status":        true,
-		"Size":          true,
-		"Ratio":         true,
-		"Location":      true,
-		"Activity Date": false,
-		"Download Rate": false,
-		"Upload Rate":   false,
-		"Error":         false,
-		"Labels":        false,
-		"Percent Done":  false,
-		"Trackers":      false,
-		"Uploaded Ever": false,
-	}
+	// headers := map[string]bool{
+	// 	"ID":            true,
+	// 	"Name":          true,
+	// 	"Status":        true,
+	// 	"Size":          true,
+	// 	"Ratio":         true,
+	// 	"Location":      true,
+	// 	"Activity Date": false,
+	// 	"Download Rate": false,
+	// 	"Upload Rate":   false,
+	// 	"Error":         false,
+	// 	"Labels":        false,
+	// 	"Percent Done":  false,
+	// 	"Trackers":      false,
+	// 	"Uploaded Ever": false,
+	// }
 
-	visibleColumns := SetColumns(*m)
+	visibleColumns, headers := SetColumns(*m)
 	var rows []table.Row
 	for _, torrent := range allTorrents {
 		rows = append(rows, buildRow(torrent, headers))
@@ -194,7 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.loaded {
 			m.torrentTable.height = msg.Height - 25
 			m.torrentTable.width = msg.Width - 5
-			m.torrentTable.updateTable(m.torrentTable.height, m.torrentTable.width)
+			m.torrentTable.updateTable()
 			m.torrentTable.selectedTorrents = make(map[int]trans.Torrent)
 			m.loaded = true
 			return m, cmd
@@ -211,7 +217,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.torrentTable.selectedTorrents = msg
 
 	case callBackMsg:
-		m.torrentTable.updateTable(m.torrentTable.height, m.torrentTable.width)
+		m.torrentTable.updateTable()
 
 	case tea.KeyMsg:
 
