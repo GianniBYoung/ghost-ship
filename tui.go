@@ -105,7 +105,9 @@ func buildRow(torrent trans.Torrent, headers []string) table.Row {
 		case "Error":
 			row = append(row, *torrent.ErrorString)
 
-		// deal with this slice
+		case "Percent Done":
+			row = append(row, fmt.Sprintf("%.2f%%", *torrent.PercentDone))
+
 		case "Lables":
 
 			var labels string
@@ -114,11 +116,12 @@ func buildRow(torrent trans.Torrent, headers []string) table.Row {
 			}
 			row = append(row, labels)
 
-		// deal with this slice
 		case "Trackers":
 			var trackers string
-			for _, tracker := range torrent.TrackerStats {
-				trackers += tracker.Host + ","
+			for _, t := range torrent.TrackerStats {
+				tracker := strings.TrimPrefix(t.Host, "https://")
+				tracker = strings.TrimPrefix(tracker, "http://")
+				trackers += tracker + ","
 			}
 			row = append(row, trackers)
 
@@ -140,14 +143,31 @@ func SetColumns(t TorrentTable) (columns []table.Column, headers []string) {
 		switch c {
 		case "ID":
 			offset += 4
+
 		case "Ratio":
+			offset += 5
+
+		case "Percent Done":
+			offset += 5
+
+		case "Upload Rate":
 			offset += 5
 
 		case "Size":
 			offset += 10
 
+		case "Activity Date":
+			offset += 11
+
 		case "Status":
 			offset += 20
+
+		case "Name":
+			offset -= 30
+
+		case "Location":
+			offset -= 10
+
 		}
 	}
 
@@ -164,11 +184,23 @@ func SetColumns(t TorrentTable) (columns []table.Column, headers []string) {
 		case "Ratio":
 			column = table.Column{Title: c, Width: 5}
 
+		case "Upload Rate":
+			column = table.Column{Title: c, Width: 5}
+
+		case "Percent Done":
+			column = table.Column{Title: c, Width: 5}
+
 		case "Size":
 			column = table.Column{Title: c, Width: 10}
 
 		case "Status":
 			column = table.Column{Title: c, Width: 20}
+
+		case "Name":
+			column = table.Column{Title: c, Width: maxColumnSize + 30}
+
+		case "Location":
+			column = table.Column{Title: c, Width: maxColumnSize + 10}
 
 		default:
 			column = table.Column{Title: c, Width: maxColumnSize}
