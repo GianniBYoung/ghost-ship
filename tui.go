@@ -240,7 +240,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if !m.loaded {
-			m.torrentTable.height = msg.Height - 25
+			m.torrentTable.height = msg.Height - 10
 			m.torrentTable.width = msg.Width - 5
 			m.torrentTable.updateTable()
 			m.torrentTable.selectedTorrents = make(map[int]trans.Torrent)

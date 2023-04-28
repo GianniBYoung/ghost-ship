@@ -47,10 +47,6 @@ func readEnvironmentalVariables(cfg *Config) {
 	if err != nil {
 		fmt.Printf("Error Reading Environmental Variables: %s", err)
 	}
-
-	fmt.Println(Cfg.UI.Columns)
-	fmt.Println(Cfg.Bookmarks)
-	fmt.Println(Cfg.Server.IP)
 }
 
 var Cfg Config
