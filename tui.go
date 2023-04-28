@@ -89,6 +89,39 @@ func buildRow(torrent trans.Torrent, headers []string) table.Row {
 		case "Location":
 			row = append(row, *torrent.DownloadDir)
 
+		case "Activity Date":
+			date := *torrent.ActivityDate
+			row = append(row, date.Format("2006-01-02"))
+
+		case "Download Rate":
+			row = append(row, strconv.Itoa(int(*torrent.RateDownload)))
+
+		case "Upload Rate":
+			row = append(row, strconv.Itoa(int(*torrent.RateUpload)))
+
+		case "Uploaded Ever":
+			row = append(row, strconv.Itoa(int(*torrent.UploadedEver)))
+
+		case "Error":
+			row = append(row, *torrent.ErrorString)
+
+		// deal with this slice
+		case "Lables":
+
+			var labels string
+			for _, label := range torrent.Labels {
+				labels += label + ","
+			}
+			row = append(row, labels)
+
+		// deal with this slice
+		case "Trackers":
+			var trackers string
+			for _, tracker := range torrent.TrackerStats {
+				trackers += tracker.Host + ","
+			}
+			row = append(row, trackers)
+
 		}
 
 	}
@@ -101,11 +134,46 @@ func SetColumns(t TorrentTable) (columns []table.Column, headers []string) {
 	for range Cfg.UI.Columns {
 		totalColumns++
 	}
-
-	maxColumnSize := t.width / totalColumns
+	offset := 0
 
 	for _, c := range Cfg.UI.Columns {
-		column := table.Column{Title: c, Width: maxColumnSize}
+		switch c {
+		case "ID":
+			offset += 4
+		case "Ratio":
+			offset += 5
+
+		case "Size":
+			offset += 10
+
+		case "Status":
+			offset += 20
+		}
+	}
+
+	maxColumnSize := (t.width + offset) / totalColumns
+
+	for _, c := range Cfg.UI.Columns {
+		var column table.Column
+
+		switch c {
+
+		case "ID":
+			column = table.Column{Title: c, Width: 4}
+
+		case "Ratio":
+			column = table.Column{Title: c, Width: 5}
+
+		case "Size":
+			column = table.Column{Title: c, Width: 10}
+
+		case "Status":
+			column = table.Column{Title: c, Width: 20}
+
+		default:
+			column = table.Column{Title: c, Width: maxColumnSize}
+
+		}
 		columns = append(columns, column)
 		headers = append(headers, c)
 	}
@@ -116,37 +184,11 @@ func SetColumns(t TorrentTable) (columns []table.Column, headers []string) {
 func (m *TorrentTable) updateTable() {
 	allTorrents := getAllTorrents(*TransmissionClient)
 
-	// headers := map[string]bool{
-	// 	"ID":            true,
-	// 	"Name":          true,
-	// 	"Status":        true,
-	// 	"Size":          true,
-	// 	"Ratio":         true,
-	// 	"Location":      true,
-	// 	"Activity Date": false,
-	// 	"Download Rate": false,
-	// 	"Upload Rate":   false,
-	// 	"Error":         false,
-	// 	"Labels":        false,
-	// 	"Percent Done":  false,
-	// 	"Trackers":      false,
-	// 	"Uploaded Ever": false,
-	// }
-
 	visibleColumns, headers := SetColumns(*m)
 	var rows []table.Row
 	for _, torrent := range allTorrents {
 		rows = append(rows, buildRow(torrent, headers))
 	}
-
-	// 	visibleColumns := []table.Column{
-	// 		{Title: "ID", Width: 4},
-	// 		{Title: "Name", Width: 45},
-	// 		{Title: "Status", Width: 15},
-	// 		{Title: "Size", Width: 8},
-	// 		{Title: "Ratio", Width: 6},
-	// 		{Title: "Location", Width: 35},
-	// 	}
 
 	myTable := table.New(table.WithColumns(visibleColumns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height), table.WithWidth(m.width))
 	style := table.DefaultStyles()
