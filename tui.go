@@ -39,6 +39,7 @@ type TorrentTable struct {
 	table            table.Model
 	torrent          trans.Torrent
 	height           int
+	width            int
 }
 
 type Model struct {
@@ -65,48 +66,163 @@ func (m *Model) Prev() {
 	}
 }
 
-func (m *TorrentTable) updateTable() {
-	allTorrents := getAllTorrents(*TransmissionClient)
-	var rows []table.Row
+func buildRow(torrent trans.Torrent, headers []string) table.Row {
+	var row table.Row
 
-	for _, torrent := range allTorrents {
-		rows = append(rows, buildRow(torrent))
+	for _, key := range headers {
+		switch key {
+		case "ID":
+			row = append(row, strconv.Itoa(int(*torrent.ID)))
+
+		case "Name":
+			row = append(row, *torrent.Name)
+
+		case "Status":
+			row = append(row, parseStatus(torrent))
+
+		case "Size":
+			row = append(row, string(torrent.TotalSize.GBString()))
+
+		case "Ratio":
+			row = append(row, fmt.Sprintf("%.2f", *torrent.UploadRatio))
+
+		case "Location":
+			row = append(row, *torrent.DownloadDir)
+
+		case "Activity Date":
+			date := *torrent.ActivityDate
+			row = append(row, date.Format("2006-01-02"))
+
+		case "Download Rate":
+			row = append(row, strconv.Itoa(int(*torrent.RateDownload)))
+
+		case "Upload Rate":
+			row = append(row, strconv.Itoa(int(*torrent.RateUpload)))
+
+		case "Uploaded Ever":
+			row = append(row, strconv.Itoa(int(*torrent.UploadedEver)))
+
+		case "Error":
+			row = append(row, *torrent.ErrorString)
+
+		case "Percent Done":
+			row = append(row, fmt.Sprintf("%.2f%%", *torrent.PercentDone))
+
+		case "Lables":
+
+			var labels string
+			for _, label := range torrent.Labels {
+				labels += label + ","
+			}
+			row = append(row, labels)
+
+		case "Trackers":
+			var trackers string
+			for _, t := range torrent.TrackerStats {
+				tracker := strings.TrimPrefix(t.Host, "https://")
+				tracker = strings.TrimPrefix(tracker, "http://")
+				trackers += tracker + ","
+			}
+			row = append(row, trackers)
+
+		}
+
 	}
-
-	columns := []table.Column{
-		{Title: "ID", Width: 4},
-		{Title: "Name", Width: 45},
-		{Title: "Status", Width: 15},
-		{Title: "Size", Width: 8},
-		{Title: "Location", Width: 35},
-	}
-
-	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height))
-	style := table.DefaultStyles()
-	style.Header = style.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).BorderBottom(true).Bold(false)
-	style.Selected = style.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(false)
-	myTable.SetStyles(style)
-
-	m.table = myTable
+	return row
 }
 
-func (m *TorrentTable) initTable(height int) {
+func SetColumns(t TorrentTable) (columns []table.Column, headers []string) {
+
+	totalColumns := 1
+	for range Cfg.UI.Columns {
+		totalColumns++
+	}
+	offset := 0
+
+	for _, c := range Cfg.UI.Columns {
+		switch c {
+		case "ID":
+			offset += 4
+
+		case "Ratio":
+			offset += 5
+
+		case "Percent Done":
+			offset += 5
+
+		case "Upload Rate":
+			offset += 5
+
+		case "Size":
+			offset += 10
+
+		case "Activity Date":
+			offset += 11
+
+		case "Status":
+			offset += 20
+
+		case "Name":
+			offset -= 30
+
+		case "Location":
+			offset -= 10
+
+		}
+	}
+
+	maxColumnSize := (t.width + offset) / totalColumns
+
+	for _, c := range Cfg.UI.Columns {
+		var column table.Column
+
+		switch c {
+
+		case "ID":
+			column = table.Column{Title: c, Width: 4}
+
+		case "Ratio":
+			column = table.Column{Title: c, Width: 5}
+
+		case "Upload Rate":
+			column = table.Column{Title: c, Width: 5}
+
+		case "Percent Done":
+			column = table.Column{Title: c, Width: 5}
+
+		case "Size":
+			column = table.Column{Title: c, Width: 10}
+
+		case "Status":
+			column = table.Column{Title: c, Width: 20}
+
+		case "Name":
+			column = table.Column{Title: c, Width: maxColumnSize + 30}
+
+		case "Location":
+			column = table.Column{Title: c, Width: maxColumnSize + 10}
+
+		default:
+			column = table.Column{Title: c, Width: maxColumnSize}
+
+		}
+		columns = append(columns, column)
+		headers = append(headers, c)
+	}
+
+	return columns, headers
+}
+
+func (m *TorrentTable) updateTable() {
 	allTorrents := getAllTorrents(*TransmissionClient)
+
+	visibleColumns, headers := SetColumns(*m)
 	var rows []table.Row
-
 	for _, torrent := range allTorrents {
-		rows = append(rows, buildRow(torrent))
+		rows = append(rows, buildRow(torrent, headers))
 	}
 
-	columns := []table.Column{
-		{Title: "ID", Width: 4},
-		{Title: "Name", Width: 45},
-		{Title: "Status", Width: 20},
-		{Title: "Size", Width: 8},
-		{Title: "Location", Width: 35},
-	}
-
-	myTable := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(height))
+	myTable := table.New(table.WithColumns(visibleColumns), table.WithRows(rows), table.WithFocused(true), table.WithHeight(m.height), table.WithWidth(m.width))
 	style := table.DefaultStyles()
 	style.Header = style.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).BorderBottom(true).Bold(false)
 	style.Selected = style.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(false)
@@ -114,7 +230,6 @@ func (m *TorrentTable) initTable(height int) {
 
 	m.torrent = allTorrents[0]
 	m.table = myTable
-
 }
 
 // takes a torrentID and returns the torrent
@@ -156,10 +271,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// init tabs here
 		if !m.loaded {
-			m.torrentTable.height = msg.Height - 25
-			m.torrentTable.initTable(m.torrentTable.height)
+			m.torrentTable.height = msg.Height - 10
+			m.torrentTable.width = msg.Width - 5
+			m.torrentTable.updateTable()
 			m.torrentTable.selectedTorrents = make(map[int]trans.Torrent)
 			m.loaded = true
 			return m, cmd

@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	trans "github.com/hekmon/transmissionrpc/v2"
@@ -62,14 +60,6 @@ func renderTorrentInfo(m InfoModel) string {
 	doc.WriteString(content)
 	return docStyle.Render(doc.String())
 
-}
-
-func buildRow(torrent trans.Torrent) table.Row {
-	torrentID := strconv.Itoa(int(*torrent.ID))
-	torrentStatus := parseStatus(torrent)
-	// torrentSize := *torrent.TotalSize
-	torrentSize := string(torrent.TotalSize.GBString())
-	return table.Row{torrentID, string(*torrent.Name), torrentStatus, torrentSize, *torrent.DownloadDir}
 }
 
 func max(a, b int) int {
