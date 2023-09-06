@@ -27,7 +27,6 @@ Place the binary `binary` in your path, adjust settings in `$XDG_HOME/settings.y
 # Configuration
 Configuration is done by modifying the `settings.yml` file located at `$XDG_HOME`
 
-
 A Default configuration is provided and can be modified to adjust what columns are shown, server credentials,
 and bookmarks(frequently used paths)
 
